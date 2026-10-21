@@ -58,7 +58,7 @@ function activateDescriptors(
 }
 
 function activateRoutes(
-  entries: Array<[string, string, Partial<PluginControlUiDescriptor>?]>,
+  entries: Array<[string, string, Parameters<typeof tab>[1]?]>,
   routes: Parameters<typeof activateDescriptors>[1],
 ) {
   return activateDescriptors(

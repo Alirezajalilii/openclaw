@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import {
   buildPluginControlUi,
   writePluginBuildManifest,
@@ -18,6 +18,7 @@ import {
   type OpenClawTestInstance,
 } from "../../../test/helpers/openclaw-test-instance.ts";
 import { createRequireRecord } from "../../../test/helpers/record.js";
+import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { evaluateControlUiContext } from "../test-helpers/control-ui-e2e-context.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
@@ -30,6 +31,7 @@ const sessionId = "inline-authority-session";
 const toolCallId = "saved-incident-call";
 const requireRecord = createRequireRecord("record", "expected-object-value");
 let instance: OpenClawTestInstance;
+const builds = useAutoCleanupTempDirTracker(afterAll);
 
 type MountProbe = {
   host: ControlUiHost;
@@ -89,14 +91,17 @@ const suite = createControlUiE2eSuite({
       env: { OPENCLAW_TEST_MINIMAL_GATEWAY: "0" },
       config: {
         gateway: { controlUi: { enabled: true, experimental: { customPlugins: true } } },
-        agents: { defaults: { heartbeat: { every: "0m" } } },
         cron: { enabled: false },
       },
     });
     instance = owner;
     try {
       const rootDir = owner.state.path("incident-tools");
-      await fs.mkdir(rootDir);
+      const exampleRoot = path.resolve("examples/inline-incident");
+      const buildParent = path.join(exampleRoot, ".artifacts");
+      await fs.mkdir(buildParent, { recursive: true });
+      // Build beside the example's installed devDependencies, then deploy only its package/assets.
+      const buildRoot = builds.make("inline-authority-", buildParent);
       for (const name of [
         "index.ts",
         "control-ui.ts",
@@ -104,14 +109,18 @@ const suite = createControlUiE2eSuite({
         "package.json",
         "openclaw.plugin.json",
       ]) {
-        await fs.copyFile(path.resolve("examples/inline-incident", name), path.join(rootDir, name));
+        await fs.copyFile(path.join(exampleRoot, name), path.join(buildRoot, name));
       }
-      await fs.writeFile(path.join(rootDir, "authority-probe.ts"), browserProbe);
-      const controlUi = await buildPluginControlUi({ rootDir, source: "./authority-probe.ts" });
+      await fs.writeFile(path.join(buildRoot, "authority-probe.ts"), browserProbe);
+      const controlUi = await buildPluginControlUi({
+        rootDir: buildRoot,
+        source: "./authority-probe.ts",
+      });
       const manifest = requireRecord(
-        JSON.parse(await fs.readFile(path.join(rootDir, "openclaw.plugin.json"), "utf8")),
+        JSON.parse(await fs.readFile(path.join(buildRoot, "openclaw.plugin.json"), "utf8")),
       );
-      await writePluginBuildManifest(rootDir, { ...manifest, controlUi });
+      await writePluginBuildManifest(buildRoot, { ...manifest, controlUi });
+      await fs.cp(buildRoot, rootDir, { recursive: true });
       const config = requireRecord(JSON.parse(await fs.readFile(owner.configPath, "utf8")));
       await owner.state.writeConfig({
         ...config,
