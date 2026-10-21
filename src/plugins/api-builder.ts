@@ -8,7 +8,7 @@ type BuildPluginApiParams = Omit<
   keyof typeof noops | "registerNodeCliFeature" | "runtimeSource" | "inlineView"
 > & {
   runtimeSource?: string;
-  handlers?: Partial<Pick<OpenClawPluginApi, keyof typeof noops>>;
+  handlers?: Partial<Pick<OpenClawPluginApiWithoutFacades, keyof typeof noops>>;
 };
 
 const noops = {
@@ -16,7 +16,6 @@ const noops = {
   registerTool: () => {},
   registerHook: () => {},
   registerHttpRoute: () => {},
-  registerHostedMediaResolver: () => {},
   registerWidgetPresenter: () => {},
   registerMcpServerConnectionResolver: () => {},
   registerChannel: () => {},
@@ -30,7 +29,6 @@ const noops = {
   registerService: () => {},
   registerGatewayDiscoveryService: () => {},
   registerCliBackend: () => {},
-  registerTextTransforms: () => {},
   registerConfigMigration: () => {},
   registerMigrationProvider: () => {},
   registerAutoEnableProbe: () => {},
@@ -56,8 +54,6 @@ const noops = {
   registerCompactionProvider: () => {},
   registerDecisionProvider: () => {},
   registerAgentHarness: () => {},
-  registerAgentExecutorController: () => {},
-  registerCodexAppServerExtensionFactory: () => {},
   registerAgentToolResultMiddleware: () => {},
   registerSessionExtension: () => {},
   enqueueNextTurnInjection: async (injection) => ({
@@ -92,7 +88,7 @@ const noops = {
   registerMemoryPromptPreparation: () => {},
   registerMemoryCorpusSupplement: () => {},
   on: () => {},
-} satisfies Partial<OpenClawPluginApi>;
+} satisfies Partial<OpenClawPluginApiWithoutFacades>;
 const noopEntries = Object.entries(noops);
 
 export function createUnavailableRuntime(
@@ -128,7 +124,7 @@ export function buildPluginApi(params: BuildPluginApiParams): OpenClawPluginApi 
       handlers[key as keyof typeof noops] ?? fallback,
     ]),
     // SAFETY: Every declared method receives its typed handler or matching default.
-  ) as Pick<OpenClawPluginApi, keyof typeof noops>;
+  ) as Pick<OpenClawPluginApiWithoutFacades, keyof typeof noops>;
   const api: OpenClawPluginApiWithoutFacades = {
     id: params.id,
     inlineView: (viewId, payload, options) =>

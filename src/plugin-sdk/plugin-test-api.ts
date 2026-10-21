@@ -36,7 +36,6 @@ export function createTestPluginApi(api: TestPluginApiInput = {}): OpenClawPlugi
     registerTool() {},
     registerHook() {},
     registerHttpRoute() {},
-    registerHostedMediaResolver() {},
     registerWidgetPresenter() {},
     registerMcpServerConnectionResolver() {},
     registerChannel() {},
@@ -46,7 +45,6 @@ export function createTestPluginApi(api: TestPluginApiInput = {}): OpenClawPlugi
     registerCli() {},
     registerNodeCliFeature() {},
     registerCliBackend() {},
-    registerTextTransforms() {},
     registerService() {},
     registerGatewayDiscoveryService() {},
     registerReload() {},
@@ -78,8 +76,6 @@ export function createTestPluginApi(api: TestPluginApiInput = {}): OpenClawPlugi
     registerCompactionProvider() {},
     registerDecisionProvider() {},
     registerAgentHarness() {},
-    registerAgentExecutorController() {},
-    registerCodexAppServerExtensionFactory() {},
     registerAgentToolResultMiddleware() {},
     registerSessionExtension() {},
     enqueueNextTurnInjection: async (injection) => ({
@@ -113,9 +109,9 @@ export function createTestPluginApi(api: TestPluginApiInput = {}): OpenClawPlugi
     on() {},
     ...flatApi,
   } satisfies OpenClawPluginApiWithoutFacades;
-  // Facades derive nested `agent`, `lifecycle`, `runContext`, and `session`
-  // views from the flat API; explicit overrides below let tests replace only
-  // the nested surface under test without rebuilding every no-op method.
+  // Facades construct the supported namespaces and omit retired flat aliases.
+  // Explicit overrides replace only the nested surface under test without
+  // rebuilding every no-op method.
   const withFacades = attachPluginApiFacades(mergedApi);
   return {
     ...withFacades,

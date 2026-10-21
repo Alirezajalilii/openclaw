@@ -36,13 +36,17 @@ export const pluginsControlUiHandlers: GatewayRequestHandlers = {
         );
         return;
       }
-      if (!reportControlUiPluginActivation(client, params)) {
+      const rejectedPluginIds = params.reports
+        .filter((report) => !reportControlUiPluginActivation(client, report))
+        .map((report) => report.pluginId);
+      if (rejectedPluginIds.length) {
         respond(
           false,
           undefined,
           errorShape(
             ErrorCodes.INVALID_REQUEST,
             "Activation report is for an inactive browser revision",
+            { details: { rejectedPluginIds } },
           ),
         );
         return;
