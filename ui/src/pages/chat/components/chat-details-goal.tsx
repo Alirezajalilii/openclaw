@@ -1,4 +1,12 @@
-import { Show, action, createMemo, createOptimistic, createSignal, onSettled } from "solid-js";
+import {
+  Errored,
+  Show,
+  action,
+  createMemo,
+  createOptimistic,
+  createSignal,
+  onSettled,
+} from "solid-js";
 import type { SessionGoal } from "../../../api/types.ts";
 import { withPromiseModalHost } from "../../../components/promise-modal-host.ts";
 import { PanelEmptyState } from "../../../components/solid/panel-empty-state.tsx";
@@ -45,7 +53,16 @@ function GoalEditDialog(props: {
 }) {
   const [draft, setDraft] = createSignal(() => props.objective);
   const [pending, setPending] = createOptimistic(false);
-  const [error, setError] = createSignal<string | null>(null);
+  const [completion, setCompletion] = createSignal<Promise<string | null>>();
+  const message = createMemo(() => completion() ?? null, { loadingValue: null });
+  const invalid = createMemo(
+    () =>
+      completion()?.then(
+        (value) => Boolean(value),
+        () => true,
+      ) ?? false,
+    { loadingValue: false },
+  );
   let submitting = false;
   let input!: HTMLTextAreaElement;
   const unchanged = () => !draft().trim() || draft() === props.objective;
@@ -60,21 +77,15 @@ function GoalEditDialog(props: {
     setPending(true);
     const objective = input.value;
     const submitOwner = props.submit;
-    let submissionError: string | null;
+    // Keep owner publications outside the dialog's held transition so navigation can retire it.
+    const result = Promise.resolve().then(() => submitOwner(objective));
+    void setCompletion(result);
     try {
-      // Keep owner publications outside the dialog's held transition so navigation can retire it.
-      submissionError = yield Promise.resolve().then(() => submitOwner(objective));
-    } catch (cause) {
-      submissionError = formatUiError(cause);
-    }
-    if (props.settled()) {
-      return;
-    }
-    submitting = false;
-    if (submissionError === null) {
-      props.finish();
-    } else {
-      setError(submissionError);
+      if ((yield result) === null && !props.settled()) {
+        props.finish();
+      }
+    } finally {
+      submitting = false;
       onSettled(() => {
         if (!props.settled()) {
           input.focus();
@@ -94,7 +105,13 @@ function GoalEditDialog(props: {
         }
       }}
     >
-      <form class="exec-approval-card" onSubmit={(event) => void submit(event)}>
+      <form
+        class="exec-approval-card"
+        onSubmit={(event) => {
+          // The outcome slot observes rejection; consume it even if the modal retires.
+          void submit(event).catch(() => undefined);
+        }}
+      >
         <div class="exec-approval-header">
           <div class="exec-approval-title">{t("chat.goals.edit")}</div>
         </div>
@@ -108,15 +125,25 @@ function GoalEditDialog(props: {
             rows={5}
             value={draft()}
             disabled={pending()}
-            aria-invalid={!pending() && error() ? "true" : undefined}
+            aria-invalid={!pending() && invalid() ? "true" : undefined}
             onInput={(event) => setDraft(event.currentTarget.value)}
             autofocus
           />
         </label>
-        <Show when={!pending() && error()}>
-          <div class="exec-approval-error" role="alert">
-            {error()}
-          </div>
+        <Show when={!pending()}>
+          <Errored
+            fallback={(error) => (
+              <div class="exec-approval-error" role="alert">
+                {formatUiError(error())}
+              </div>
+            )}
+          >
+            <Show when={message()}>
+              <div class="exec-approval-error" role="alert">
+                {message()}
+              </div>
+            </Show>
+          </Errored>
         </Show>
         <openclaw-modal-actions class="exec-approval-actions">
           <button class="btn" type="button" disabled={pending()} onClick={() => props.finish()}>
