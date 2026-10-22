@@ -10,6 +10,7 @@ import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { ApplicationContext } from "../../app/context.ts";
 import { t } from "../../i18n/index.ts";
 import { formatUiError } from "../../lib/format-error.ts";
+import { openExternalUrlSafe } from "../../lib/open-external-url.ts";
 import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
 import {
   buildAgentMainSessionKey,
@@ -18,7 +19,7 @@ import {
 } from "../../lib/sessions/session-key.ts";
 import { showToast } from "../../lib/toast.ts";
 import { generateUUID } from "../../lib/uuid.ts";
-import { clawDraftUrl } from "./draft-navigation.ts";
+import { canCreateClawDraft } from "./draft-navigation.ts";
 
 type Target = {
   agentId: string;
@@ -59,6 +60,7 @@ export class ClawCreatorFlow {
   modalOpen = false;
   publication: ClawsDraftsPublishResult | null = null;
   error: string | null = null;
+  presentationLifetime = Promise.withResolvers<void>();
 
   get hasActiveDraft() {
     return this.target !== null;
@@ -79,6 +81,11 @@ export class ClawCreatorFlow {
   readonly subscribe = this.listeners.subscribe;
 
   private readonly changed = this.listeners.publish;
+
+  retirePresentation() {
+    this.presentationLifetime.resolve();
+    this.presentationLifetime = Promise.withResolvers<void>();
+  }
 
   private mainSessionKey(agentId: string) {
     const mainKey = resolveUiConfiguredMainKey({
@@ -110,6 +117,7 @@ export class ClawCreatorFlow {
   }
 
   private reset(target: Target | null) {
+    this.retirePresentation();
     this.generation += 1;
     this.reviewRequest += 1;
     if (this.pollTimer) {
@@ -152,12 +160,17 @@ export class ClawCreatorFlow {
         client,
       };
       const generation = this.reset(target);
-      const reviewUrl = clawDraftUrl(this.context.basePath, target);
-      const message = `${created.prompt}\nReview: [Create a Claw](${reviewUrl})`;
       const ack = await client.request<{ status?: string }>("chat.send", {
         sessionKey: target.sessionKey,
         ...(isUiGlobalSessionKey(target.sessionKey) ? { agentId } : {}),
-        message,
+        message: created.prompt,
+        workContext: {
+          page: "claw-create",
+          title: t("clawsDraft.title"),
+          agentId,
+          sessionKey: target.sessionKey,
+          detail: { draftId: target.draftId },
+        },
         deliver: false,
         idempotencyKey: generateUUID(),
       });
@@ -257,6 +270,7 @@ export class ClawCreatorFlow {
       this.reviewCurrent = true;
       this.choices ??= {
         name: result.name.split("/").at(-1) ?? result.name,
+        displayName: result.displayName,
         description: result.description,
         excluded: result.items.filter((item) => !item.included).map((item) => item.id),
       };
@@ -311,6 +325,15 @@ export class ClawCreatorFlow {
         this.publication = result;
         this.modalOpen = false;
         this.error = null;
+        showToast({
+          message: t(
+            result.publicationStatus === "published"
+              ? "clawsDraft.published"
+              : "clawsDraft.pending",
+          ),
+          actionLabel: t("clawsDraft.viewPublication"),
+          onAction: () => openExternalUrlSafe(result.url),
+        });
       }
     } catch (error) {
       if (this.current(target, generation)) {
@@ -325,6 +348,7 @@ export class ClawCreatorFlow {
   }
 
   close() {
+    this.retirePresentation();
     this.modalOpen = false;
     this.changed();
   }
@@ -353,4 +377,11 @@ export function clawCreatorFlow(context: ApplicationContext) {
     flows.set(context, flow);
   }
   return flow;
+}
+
+export function clawCreatorAction(context: ApplicationContext, agentId: string | undefined) {
+  if (!agentId || !canCreateClawDraft(context)) {
+    return undefined;
+  }
+  return () => void clawCreatorFlow(context).start(agentId);
 }
