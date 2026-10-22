@@ -69,6 +69,7 @@ suite.define(() => {
               .getElementById(element.getAttribute("aria-describedby") ?? "")
               ?.textContent?.trim(),
           }));
+          expect(await diagram.locator(".description").isVisible()).toBe(false);
           const frame = await takeControlUiScreenshotFrame(page, diagram, [image], {
             animations: "disabled",
             elements: [diagram],

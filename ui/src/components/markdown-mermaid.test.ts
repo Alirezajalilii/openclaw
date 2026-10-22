@@ -320,9 +320,16 @@ it.each([true, false])(
 it("shares concurrent layout work while each displayed diagram owns its URL", async () => {
   const { pending, elements } = await pendingDiagram("Shared layout", 2);
   expect(renderSvg).toHaveBeenCalledTimes(1);
-  pending.resolve(svg);
+  pending.resolve(svg.replace("<text>", "<desc>Shared meaning</desc><text>"));
   const [firstUrl, secondUrl] = await Promise.all(elements.map(waitForImage));
   expect(firstUrl).not.toBe(secondUrl);
+  const descriptionIds = elements.map((element) =>
+    element.querySelector("img")?.getAttribute("aria-describedby"),
+  );
+  expect(new Set(descriptionIds).size).toBe(2);
+  for (const id of descriptionIds) {
+    expect(document.getElementById(id!)?.textContent).toBe("Shared meaning");
+  }
 
   await disconnect(elements[0]!);
   expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(firstUrl);
@@ -346,6 +353,7 @@ it("keeps escaped metadata as text and replaces expanded alternatives with their
   expect(element.querySelector("img")?.alt).toBe(title);
   expect(element.querySelector(".description")?.textContent).toBe(description);
   expect(element.querySelector(".description")?.children).toHaveLength(0);
+  expect(element.querySelector<HTMLElement>(".description")?.hidden).toBe(true);
   await selectAction(element, "Expand diagram");
   await waitForSolid(() =>
     expect(element.querySelector("openclaw-image-lightbox img")?.getAttribute("alt")).toBe(title),
@@ -355,6 +363,13 @@ it("keeps escaped metadata as text and replaces expanded alternatives with their
     document.getElementById(expanded.querySelector("img")?.getAttribute("aria-describedby") ?? "");
   expect(expandedDescription()?.textContent).toBe(description);
   expect(expandedDescription()?.children).toHaveLength(0);
+  expect(expandedDescription()?.hidden).toBe(true);
+  element.querySelector<HTMLButtonElement>("openclaw-image-lightbox button.close")!.click();
+  await waitForSolid(() => expect(element.querySelector("openclaw-image-lightbox")).toBeNull());
+  await selectAction(element, "Expand diagram");
+  await waitForSolid(() =>
+    expect(element.querySelector<HTMLImageElement>("openclaw-image-lightbox img")?.alt).toBe(title),
+  );
   expect(element.querySelector("script")).toBeNull();
 
   const replacement = createDeferred<string>();
@@ -370,7 +385,8 @@ it("keeps escaped metadata as text and replaces expanded alternatives with their
     ),
   );
   const current = element.querySelector("openclaw-image-lightbox")!;
-  expect(current.imageDescription).toBe(
-    "No text description was provided. Ask the author to describe this diagram.",
-  );
+  expect(current.imageDescription).toBe("");
+  expect(current.querySelector("img")?.hasAttribute("aria-describedby")).toBe(false);
+  expect(element.querySelector(".description")).toBeNull();
+  expect(element.querySelector(".preview")?.hasAttribute("aria-describedby")).toBe(false);
 });

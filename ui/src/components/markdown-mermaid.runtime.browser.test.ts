@@ -173,7 +173,6 @@ it("keeps untrusted alternatives inert and retires metadata when the source chan
   await import("./markdown-mermaid.tsx");
   const element = document.createElement("openclaw-mermaid");
   document.body.append(element);
-  const fallback = "No text description was provided. Ask the author to describe this diagram.";
   const authored =
     "flowchart LR\naccTitle: Audit 🧪\naccDescr: Inspect <img src=x onerror=alert(1)> before allowing the request.\nA --> B";
   const cases = [
@@ -181,12 +180,12 @@ it("keeps untrusted alternatives inert and retires metadata when the source chan
     {
       source: "flowchart LR\nA[No authored alternative] --> B",
       title: "Mermaid diagram",
-      description: fallback,
+      description: "",
     },
     {
       source: "flowchart LR\naccTitle: Approval order\nA --> B",
       title: "Approval order",
-      description: fallback,
+      description: "",
     },
     {
       source: "flowchart LR\naccDescr: Approval precedes execution.\nA --> B",
@@ -205,17 +204,21 @@ it("keeps untrusted alternatives inert and retires metadata when the source chan
       await expect
         .poll(() => element.querySelector<HTMLImageElement>(".preview img")?.alt)
         .toBe(fixture.title);
-      await expect
-        .poll(() => element.querySelector(".description")?.textContent)
-        .toContain(fixture.description);
       const image = element.querySelector<HTMLImageElement>(".preview img")!;
       await image.decode();
       const description = document.getElementById(image.getAttribute("aria-describedby")!);
-      expect(description).not.toBeNull();
-      if (!fixture.partial) {
-        expect(description?.textContent).toBe(fixture.description);
+      if (fixture.description) {
+        expect(description?.textContent).toContain(fixture.description);
+        if (!fixture.partial) {
+          expect(description?.textContent).toBe(fixture.description);
+        }
+        expect(description?.children).toHaveLength(0);
+        expect(getComputedStyle(description!).display).toBe("none");
+      } else {
+        expect(description).toBeNull();
+        expect(image.hasAttribute("aria-describedby")).toBe(false);
+        expect(element.querySelector(".description")).toBeNull();
       }
-      expect(description?.children).toHaveLength(0);
       expect(element.querySelector(".preview svg, .preview script, .description img")).toBeNull();
       expect(image.src).toMatch(/^blob:/u);
     }

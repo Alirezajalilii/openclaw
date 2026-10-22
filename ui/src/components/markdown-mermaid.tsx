@@ -128,8 +128,7 @@ function MermaidContent(props: MermaidProps, host: MermaidElement) {
   });
   const imageUrl = () => image().value()?.url ?? "";
   const imageTitle = () => image().value()?.title || t("chat.mermaid.title");
-  const imageDescription = () =>
-    image().value()?.description || t("chat.mermaid.missingDescription");
+  const imageDescription = () => image().value()?.description ?? "";
 
   const request = createMemo(
     () => {
@@ -216,7 +215,7 @@ function MermaidContent(props: MermaidProps, host: MermaidElement) {
                     ? t("chat.mermaid.expandNamed", { title: imageTitle() })
                     : t("chat.mermaid.expand")
                 }
-                aria-describedby={descriptionId}
+                aria-describedby={imageDescription() ? descriptionId : undefined}
                 aria-haspopup="dialog"
                 title={t("chat.mermaid.expand")}
                 onClick={() => setExpanded(true)}
@@ -224,12 +223,14 @@ function MermaidContent(props: MermaidProps, host: MermaidElement) {
                 <img
                   src={imageUrl()}
                   alt={imageTitle()}
-                  aria-describedby={descriptionId}
+                  aria-describedby={imageDescription() ? descriptionId : undefined}
                   onError={() => image().fail()}
                 />
-                <span class="description" id={descriptionId}>
-                  {imageDescription()}
-                </span>
+                <Show when={imageDescription()}>
+                  <span class="description" id={descriptionId} hidden>
+                    {imageDescription()}
+                  </span>
+                </Show>
               </button>
             </Show>
           }

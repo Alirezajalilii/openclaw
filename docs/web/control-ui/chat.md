@@ -862,12 +862,13 @@ When writing diagrams, including agent-authored replies, include a short `accTit
 and a plain-language `accDescr` explaining the relationships or outcome. Mermaid
 supports both `accDescr: A one-line description` and the multiline form above.
 The Control UI uses the title as image alternative text and associates the
-longer description with both the inline image and expanded image. The description
-is also readable below the inline diagram. Metadata is treated as text, not HTML.
+longer description with both the inline image and expanded image through an
+invisible text alternative. No caption is added below the diagram. Metadata is
+treated as text, not HTML.
 
 Describe the meaning, not just the shapes. Source code is not a substitute for a
-text equivalent. Without `accDescr`, the viewer explains that no description was
-provided; it does not invent one. For diagram types that do not support Mermaid
+text equivalent. Without `accDescr`, the image keeps its title without an added
+notice. For diagram types that do not support Mermaid
 accessibility metadata, include the equivalent explanation in the surrounding
 message as well.
 
