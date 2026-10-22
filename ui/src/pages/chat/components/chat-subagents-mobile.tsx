@@ -123,7 +123,13 @@ function MobileStop(props: { action: ChatSubagentMobileStop; control?: SubagentS
         <span>{pending() ? t("chat.subagentsPanel.stopping") : props.action.label}</span>
       </button>
       <Loading on={currentCompletion()}>
-        <Errored fallback={(error) => <span role="alert">{formatUiError(error())}</span>}>
+        <Errored
+          fallback={(error) => (
+            <span class="chat-subagents-mobile__error" role="alert">
+              {formatUiError(error())}
+            </span>
+          )}
+        >
           {completed()}
         </Errored>
       </Loading>

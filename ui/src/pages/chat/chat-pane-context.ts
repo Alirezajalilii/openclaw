@@ -184,7 +184,6 @@ export abstract class ChatPaneContext extends ChatPaneLifecycle {
     } as const;
     const property = pendingProperty[mode];
     const pendingKey = this.headerPresentation[property];
-    const placementStartup = scope.context.placementStartup;
     const onPendingChange = (key: string | null) => {
       if (mode === "recover" && key !== null && this.state) {
         dismissChatError(this.state);
@@ -200,7 +199,10 @@ export abstract class ChatPaneContext extends ChatPaneLifecycle {
       gatewaySnapshot: scope.context.gateway.snapshot,
       currentGatewaySnapshot: () => scope.context.gateway.snapshot,
       row,
-      currentRow: () => (this.state ? selectedChatSessionRow(this.state) : undefined),
+      currentRow: () => {
+        const current = this.state ? selectedChatSessionRow(this.state) : undefined;
+        return current?.key === row.key ? current : undefined;
+      },
       fallbackAgentId: resolveChatAgentId(scope.state),
       isCurrent: () => this.ownsHeaderOutcomeScope(scope),
       publishError: (error: unknown) => this.publishHeaderError(error, scope.headerOutcomeOwner),
@@ -209,30 +211,24 @@ export abstract class ChatPaneContext extends ChatPaneLifecycle {
     try {
       if (mode === "reclaim") {
         const { reclaimChatPanePlacement } = await import("./chat-pane-placement.runtime.ts");
-        await reclaimChatPanePlacement({
+        return await reclaimChatPanePlacement({
           ...params,
-          currentRow: () => {
-            const current = this.state ? selectedChatSessionRow(this.state) : undefined;
-            return current?.key === row.key ? current : undefined;
-          },
           machineName,
           reclaimingKey: pendingKey,
-          placementStartup,
+          placementStartup: scope.context.placementStartup,
           onReclaimingChange: onPendingChange,
         });
-      } else {
-        const { changeSessionPlacement } =
-          await import("../../components/session-placement.runtime.ts");
-        await changeSessionPlacement({
-          ...params,
-          mode,
-          presentation,
-          pendingKey,
-          requiredProfile: () =>
-            scope.context.agents.state.agentsList?.sessionPlacement?.requiredProfile?.id,
-          onPendingChange,
-        });
       }
+      const placement = await import("../../components/session-placement.runtime.ts");
+      await placement.changeSessionPlacement({
+        ...params,
+        mode,
+        presentation,
+        pendingKey,
+        requiredProfile: () =>
+          scope.context.agents.state.agentsList?.sessionPlacement?.requiredProfile?.id,
+        onPendingChange,
+      });
     } catch (error) {
       params.publishError(error);
     }

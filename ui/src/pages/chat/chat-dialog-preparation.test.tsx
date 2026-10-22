@@ -33,7 +33,10 @@ import { ChatSubagentMobileHeader } from "./components/chat-subagents-mobile.tsx
 import * as draftDialog from "./components/file-draft-recovery-dialog-view.tsx";
 import * as stopDialog from "./components/session-worker-stop-dialog.tsx";
 
-vi.mock("../../lib/toast.ts", () => ({ showToast: vi.fn() }));
+vi.mock("../../lib/toast.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/toast.ts")>()),
+  showToast: vi.fn(),
+}));
 afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -72,7 +75,9 @@ it.each([false, true])("scopes a new-group preparation failure (retired=%s)", as
   const dialog = vi.spyOn(inputDialog, "showInputDialog").mockReturnValueOnce(preparation.promise);
   const operation = pane.handleHeaderSessionAction({ kind: "new-group" }, row);
   await waitForSolid(() => expect(dialog).toHaveBeenCalledOnce());
-  if (retired) pane.presented = false;
+  if (retired) {
+    pane.presented = false;
+  }
   preparation.reject(new Error("Group dialog unavailable"));
   await operation;
   expect(state.chatError).toBe(retired ? null : "Group dialog unavailable");
