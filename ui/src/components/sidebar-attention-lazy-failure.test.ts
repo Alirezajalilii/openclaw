@@ -75,7 +75,11 @@ it("reports a rejected Inbox import and lets the same trigger retry", async () =
   const { element, trigger } = await mountAttention();
   trigger.click();
   await waitForSolid(() =>
-    expect(showToast).toHaveBeenCalledWith({ message: failure.message, severity: "error" }),
+    expect(showToast).toHaveBeenCalledWith({
+      message:
+        "Panel failed to load. Some interface files could not be downloaded. Check your connection, then reload.",
+      severity: "error",
+    }),
   );
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
   expect(element.querySelector(".sidebar-issues-panel")).toBeNull();

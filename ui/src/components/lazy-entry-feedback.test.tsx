@@ -50,7 +50,8 @@ it("reports a failed table dialog import and releases the open reservation", asy
   trigger.click();
   await waitForSolid(() => expect(showToast).toHaveBeenCalledOnce());
   expect(showToast).toHaveBeenLastCalledWith({
-    message: expect.stringContaining("Dialog module unavailable. Try again."),
+    message:
+      "Panel failed to load. Some interface files could not be downloaded. Check your connection, then reload.",
     severity: "error",
   });
   expect(owner.querySelector("openclaw-modal-dialog")).toBeNull();

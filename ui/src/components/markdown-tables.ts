@@ -1,7 +1,7 @@
 import type { MarkdownIt } from "markdown-it";
 import { escapeHtml } from "../../../src/shared/html-escape.js";
 import { t } from "../i18n/index.ts";
-import { formatUiError } from "../lib/format-error.ts";
+import { formatUiError, UserFacingError } from "../lib/format-error.ts";
 import { anchorFromNavigationEvent } from "../lib/navigation-click.ts";
 import { listen } from "../lib/reactive/listener.ts";
 import { showToast } from "../lib/toast.ts";
@@ -216,7 +216,11 @@ async function showTableDialog(
   // Reserve through teardown before loading; reconnect cannot revive this request.
   state.closeDialog = close;
   try {
-    await import("./modal-dialog.tsx");
+    await import("./modal-dialog.tsx").catch((cause: unknown) => {
+      throw new UserFacingError(`${t("lazyView.errorTitle")}. ${t("lazyView.staleSubtitle")}`, {
+        cause,
+      });
+    });
     if (state.closeDialog !== close || !owner.isConnected || !trigger.isConnected) {
       return;
     }

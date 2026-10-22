@@ -118,9 +118,12 @@ function renderSidebarAttentionContent(props: SidebarAttentionProps, host: HTMLE
     let runtime: Awaited<ReturnType<typeof panelLoad.load>>;
     try {
       runtime = await panelLoad.load();
-    } catch (error) {
+    } catch {
       if (isCurrentPanel(generation, scope)) {
-        showToast({ message: formatUiError(error), severity: "error" });
+        showToast({
+          message: `${t("lazyView.errorTitle")}. ${t("lazyView.staleSubtitle")}`,
+          severity: "error",
+        });
       }
       return;
     }
