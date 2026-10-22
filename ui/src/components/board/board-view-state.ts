@@ -549,7 +549,9 @@ export function createBoardViewState(
   };
   return {
     presentation,
-    mutationFailure: createMemo(() => presentation.mutationFailure?.result.then(() => null) ?? null),
+    mutationFailure: createMemo(
+      () => presentation.mutationFailure?.result.then(() => null) ?? null,
+    ),
     visitedTabs,
     contentHeights,
     cellCallbacks,
