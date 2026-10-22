@@ -27,6 +27,7 @@ import {
 import { flush, waitForSolid } from "../../test-helpers/solid-settle.ts";
 import { createStorageMock } from "../../test-helpers/storage.ts";
 import { AppearanceBackground } from "./appearance-background.tsx";
+import { createConfigRouteContext } from "./config-page.test-support.ts";
 import {
   AppearanceBackground as BackgroundView,
   type AppearanceBackgroundView as BackgroundViewProps,
@@ -89,18 +90,18 @@ async function mount(
       }),
     ],
   });
-  const contextFixture: Pick<ApplicationContext, "gateway" | "router"> & {
-    runtimeConfig: Pick<ApplicationContext["runtimeConfig"], "canPatch"> & {
-      state: Pick<ApplicationContext["runtimeConfig"]["state"], "connected">;
-    };
-    theme: typeof theme;
-  } = {
+  const applicationFixture = createConfigRouteContext();
+  const context: ApplicationContext = {
+    ...applicationFixture,
     gateway: gateway.gateway,
-    runtimeConfig: { state: { connected: true }, canPatch: true },
+    runtimeConfig: {
+      ...applicationFixture.runtimeConfig,
+      state: { ...applicationFixture.runtimeConfig.state, connected: true },
+      canPatch: true,
+    },
     theme,
     router,
   };
-  const context = contextFixture as ApplicationContext;
   const provider = createSolidApplicationContextProvider(context);
   host.innerHTML = '<div class="config-content"><div class="settings-page"></div></div>';
   const container = host.querySelector<HTMLElement>(".settings-page")!;
