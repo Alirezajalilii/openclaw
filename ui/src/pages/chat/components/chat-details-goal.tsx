@@ -5,6 +5,7 @@ import {
   createMemo,
   createOptimistic,
   createSignal,
+  latest,
   onSettled,
 } from "solid-js";
 import type { SessionGoal } from "../../../api/types.ts";
@@ -161,6 +162,7 @@ function GoalEditDialog(props: {
 /** Controlled mobile interior. The host owns the state title, navigation and domain facts. */
 export function ChatDetailsGoal(props: ChatDetailsGoalProps) {
   let editDialog: { controller: AbortController; identity: string } | undefined;
+  const [editAttempt, setEditAttempt] = createSignal<{ identity: string; result: Promise<void> }>();
   const goalIdentity = createMemo(() => JSON.stringify([props.sessionId, props.goal?.id]));
   const canAct = () =>
     props.presented &&
@@ -176,13 +178,14 @@ export function ChatDetailsGoal(props: ChatDetailsGoalProps) {
       ? props.recovery
       : undefined;
 
-  const editGoal = async (goal: SessionGoal) => {
+  const editGoal = (goal: SessionGoal) => {
     if (editDialog || !canAct() || !props.onGoalSubmit) {
       return;
     }
     const sessionId = props.sessionId;
     const controller = new AbortController();
-    editDialog = { controller, identity: goalIdentity() };
+    const identity = goalIdentity();
+    editDialog = { controller, identity };
     const submit = async (objective: string): Promise<string | null> => {
       // The dialog can outlive its entry click; submit only against its original session/goal.
       if (
@@ -209,22 +212,29 @@ export function ChatDetailsGoal(props: ChatDetailsGoalProps) {
       });
       return saved ? null : (props.getGoalSubmitError?.() ?? t("chat.goals.editFailed"));
     };
-    try {
-      await withPromiseModalHost<void>({ signal: controller.signal, value: undefined }, (modal) => {
-        modal.render(() => (
-          <GoalEditDialog
-            objective={goal.objective}
-            submit={submit}
-            finish={() => modal.finish(undefined)}
-            settled={() => modal.settled}
-          />
-        ));
-      });
-    } finally {
-      if (editDialog?.controller === controller) {
-        editDialog = undefined;
+    const result = (async () => {
+      try {
+        await withPromiseModalHost<void>(
+          { signal: controller.signal, value: undefined },
+          (modal) => {
+            modal.render(() => (
+              <GoalEditDialog
+                objective={goal.objective}
+                submit={submit}
+                finish={() => modal.finish(undefined)}
+                settled={() => modal.settled}
+              />
+            ));
+          },
+        );
+      } finally {
+        if (editDialog?.controller === controller) {
+          editDialog = undefined;
+        }
       }
-    }
+    })();
+    setEditAttempt({ identity, result });
+    void result.catch(() => undefined);
   };
 
   return (
@@ -240,6 +250,27 @@ export function ChatDetailsGoal(props: ChatDetailsGoalProps) {
         }}
       </Show>
       <div class="chat-details-goal__body" ref={[elementRef(props.onScrollPortRef)]}>
+        <Show
+          when={props.presented && editAttempt()?.identity === goalIdentity() && editAttempt()}
+          keyed
+        >
+          {(attempt) => {
+            const completed = createMemo(() => attempt.result.then(() => null), {
+              loadingValue: null,
+            });
+            return (
+              <Errored
+                fallback={(error) => (
+                  <div class="exec-approval-error" role="alert">
+                    {formatUiError(error())}
+                  </div>
+                )}
+              >
+                {latest(completed)}
+              </Errored>
+            );
+          }}
+        </Show>
         <Show when={props.recovery}>
           <div class="chat-details-goal__recovery" role="status">
             <ChatGoalRecoveryMessage recovery={props.recovery!} />
@@ -284,7 +315,7 @@ export function ChatDetailsGoal(props: ChatDetailsGoalProps) {
                 connected={props.connected && props.presented}
                 resumeRecovery={resumeRecovery()}
                 onGoalAction={props.onGoalAction}
-                onGoalEdit={props.onGoalSubmit ? (goal) => void editGoal(goal) : undefined}
+                onGoalEdit={props.onGoalSubmit ? (goal) => editGoal(goal) : undefined}
               />
             </Show>
           </div>

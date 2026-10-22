@@ -422,6 +422,12 @@ Re-arm this narrow error slot on retry to clear the previous error immediately;
 keep the controls outside it. A local error string written by each completion
 would lose that ordering and require a second request-generation guard.
 
+The user-action outcome also owns lazy dialog import, registration, and preparation.
+A catch that starts after `await showConfirmDialog(...)` or `showInputDialog(...)`
+leaves preparation failures unobserved by a void event caller. Keep those awaits
+inside the existing outcome owner's error path, and retain its current-scope checks
+after they settle; generic confirmation behavior does not need to change.
+
 ## Key a projection over an owner snapshot
 
 Use `projectSource`/`projectOwner` for the synchronous owner adapter, then
@@ -470,6 +476,13 @@ initialization errored. The table also retains its DOM identity through an
 optimistic transition; a readiness `Show` around it can recreate the rows.
 
 ## Load code at its existing boundary
+
+Native custom-element bridges create independent Solid roots, so their lazy
+reads do not inherit the shell's `Errored` boundary. Protect each lazy region
+within the same root with a local `Errored` boundary, or use an explicit
+optional fallback when losing that decoration is acceptable. `Loading` handles
+pending reads; it does not handle a rejected import. Keep usable controls and
+drafts outside the error slot so retry can recover the region in place.
 
 Use `lazy` for the component code, and retain the route's existing component
 loader. The loader still controls when import begins and when the router

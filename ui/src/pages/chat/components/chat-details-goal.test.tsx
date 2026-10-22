@@ -3,6 +3,7 @@ import { createSignal, flush } from "solid-js";
 import { expect, it, vi } from "vitest";
 import { createDeferred } from "../../../../../test/helpers/promise.js";
 import type { SessionGoal } from "../../../api/types.ts";
+import * as modalHosts from "../../../components/promise-modal-host.ts";
 import type { ChatGoalRecovery } from "../../../lib/chat/chat-types.ts";
 import {
   installDialogPolyfill,
@@ -23,6 +24,42 @@ const goal: SessionGoal = {
   tokensUsed: 120,
   continuationTurns: 0,
 };
+
+it("reports failed edit-dialog preparation and permits a fresh attempt", async () => {
+  const restore = installDialogPolyfill();
+  const prepare = vi
+    .spyOn(modalHosts, "withPromiseModalHost")
+    .mockRejectedValueOnce(new Error("Goal dialog unavailable. Try again."));
+  const view = mountSolid(() => (
+    <ChatDetailsGoal
+      goal={goal}
+      sessionId="session-original"
+      presented
+      connected
+      canAct
+      onGoalAction={() => {}}
+      onGoalSubmit={async () => true}
+    />
+  ));
+  try {
+    view.getByRole("button", { name: "Edit goal" }).click();
+    view.getByRole("button", { name: "Edit goal" }).click();
+    await waitForSolid(() =>
+      expect(view.getByRole("alert").textContent).toBe("Goal dialog unavailable. Try again."),
+    );
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(document.body.querySelector("openclaw-modal-dialog")).toBeNull();
+    view.getByRole("button", { name: "Edit goal" }).click();
+    const { modal } = await waitForRenderedModalDialog(document.body);
+    await waitForSolid(() => expect(view.queryByRole("alert")).toBeNull());
+    expect(modal.querySelector("textarea")?.value).toBe(goal.objective);
+    modal.querySelector<HTMLButtonElement>('button[type="button"]')!.click();
+  } finally {
+    view.unmount();
+    prepare.mockRestore();
+    restore();
+  }
+});
 
 it("retains the objective while hidden and keeps recovery available after the goal is removed", () => {
   vi.useFakeTimers();
