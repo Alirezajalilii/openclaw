@@ -30,7 +30,9 @@ vi.mock("../lib/idle-import.ts", async (original) => {
 const stores = new Set<ReturnType<typeof createSidebarAttentionStore>>();
 afterEach(() => {
   document.body.replaceChildren();
-  for (const store of stores) store.dispose();
+  for (const store of stores) {
+    store.dispose();
+  }
   stores.clear();
   loadFailure.mockReset();
   vi.mocked(showToast).mockClear();

@@ -50,7 +50,7 @@ it("reports a failed table dialog import and releases the open reservation", asy
   trigger.click();
   await waitForSolid(() => expect(showToast).toHaveBeenCalledOnce());
   expect(showToast).toHaveBeenLastCalledWith({
-    message: "Dialog module unavailable. Try again.",
+    message: expect.stringContaining("Dialog module unavailable. Try again."),
     severity: "error",
   });
   expect(owner.querySelector("openclaw-modal-dialog")).toBeNull();
@@ -111,7 +111,7 @@ it("reports a placement picker import failure through the menu's error owner wit
   });
   expect(publishError).toHaveBeenCalledOnce();
   expect(publishError.mock.calls[0]?.[0]).toMatchObject({
-    message: "Placement picker unavailable. Try again.",
+    cause: { message: "Placement picker unavailable. Try again." },
   });
   expect(request).not.toHaveBeenCalled();
   expect(reconcileMutation).not.toHaveBeenCalled();

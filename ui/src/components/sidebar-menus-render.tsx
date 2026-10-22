@@ -367,7 +367,7 @@ export function renderSidebarAgentCreateDialogForMenus(
           menus.closeAgentCreateDialog();
           void import("../app/create-agent.ts")
             .then(({ createApplicationAgent }) => createApplicationAgent(context, identity))
-            .catch((error) =>
+            .catch((error: unknown) =>
               showToast({
                 message: t("agentChip.creationFailed", { error: formatUiError(error) }),
                 durationMs: 12_000,
