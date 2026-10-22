@@ -1,4 +1,13 @@
-import { action, createMemo, createOptimistic, createSignal, refresh } from "solid-js";
+import {
+  action,
+  createMemo,
+  createOptimistic,
+  createSignal,
+  Errored,
+  Loading,
+  onSettled,
+  refresh,
+} from "solid-js";
 import { Icon } from "../../../components/solid/icon.tsx";
 import type { BoardProvider } from "../../../lib/board/provider.ts";
 import { t } from "../../../lib/reactive/i18n.ts";
@@ -23,23 +32,25 @@ export function WidgetPinButton(props: { target: WidgetPinTarget; title?: string
   );
   const [pinned, setPinned] = createOptimistic(() => ownerPinned().read());
   const [saving, setSaving] = createOptimistic(false);
-  const [failed, setFailed] = createSignal(false);
+  const [receipt, setReceipt] = createSignal<Promise<void>>();
+  const settled = createMemo(() => receipt());
   let admitted = false;
   let button!: HTMLButtonElement;
   const present = action(function* (completion: Promise<void>) {
     setSaving(true);
     setPinned(true);
-    setFailed(false);
-    try {
-      yield completion;
-      yield refresh(pinned);
-    } catch {
-      setFailed(true);
-      if (button.isConnected) {
-        showToast({ message: t("chat.toolCards.pinToDashboardFailed") });
-      }
-    }
+    yield completion;
+    yield refresh(pinned);
   });
+  function PinFailure() {
+    onSettled(() => {
+      button.title = t("chat.toolCards.pinToDashboardFailed");
+      if (button.isConnected) {
+        showToast({ message: button.title });
+      }
+    });
+    return null;
+  }
   const label = () =>
     t(
       saving()
@@ -56,9 +67,7 @@ export function WidgetPinButton(props: { target: WidgetPinTarget; title?: string
       data-pin-widget
       disabled={saving() || pinned()}
       data-pinned={!saving() && pinned() ? "" : undefined}
-      title={
-        !saving() && !pinned() && failed() ? t("chat.toolCards.pinToDashboardFailed") : label()
-      }
+      title={label()}
       aria-label={label()}
       onClick={() => {
         // Solid writes flush later; admission still prevents two same-task clicks.
@@ -72,12 +81,18 @@ export function WidgetPinButton(props: { target: WidgetPinTarget; title?: string
         const completion = target.mcpApp
           ? target.board.pinMcpApp({ ...identity, viewId: target.viewId })
           : target.board.pinWidget({ ...identity, docId: target.viewId });
-        void present(completion).finally(() => {
-          admitted = false;
-        });
+        const result = present(completion);
+        void setReceipt(result);
+        void result.then(
+          () => (admitted = false),
+          () => (admitted = false),
+        );
       }}
     >
       <Icon name="pin" />
+      <Loading on={receipt()} fallback={null}>
+        <Errored fallback={<PinFailure />}>{(settled(), null)}</Errored>
+      </Loading>
     </button>
   );
 }

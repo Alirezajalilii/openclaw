@@ -11,6 +11,7 @@ import { bumpCanvasWidgetFrameConnectionGeneration } from "../../../lib/chat/can
 import { projectGateway } from "../../../lib/reactive/application.ts";
 import { createTestSessionCapability } from "../../../lib/sessions/session-capability.test-support.ts";
 import { ContentPresentation } from "../../../lib/solid/presentation.ts";
+import * as toast from "../../../lib/toast.ts";
 import { disposeSidebarContextLifecycles } from "../../../test-helpers/app-sidebar-context-lifecycle.ts";
 import { createContext } from "../../../test-helpers/app-sidebar.ts";
 import {
@@ -24,6 +25,7 @@ import { SidebarPanel } from "./chat-sidebar-content.tsx";
 import { ToolPreview } from "./widget-card-view.tsx";
 import { ToolPreview as DeferredToolPreview } from "./widget-card.ts";
 import * as widgetExport from "./widget-export.ts";
+import { WidgetPinButton } from "./widget-pin-button.tsx";
 
 const canvasPreview = {
   kind: "canvas",
@@ -572,6 +574,36 @@ describe("widget-card", () => {
       expect(button).toMatchObject({ disabled: false, ariaLabel: "Pin to dashboard" }),
     );
     expect(button.hasAttribute("data-pinned")).toBe(false);
+  });
+
+  it("keeps pin failure feedback on the focused button without replaying its toast", async () => {
+    const pending = Promise.withResolvers<void>();
+    const { provider, snapshot } = boardProvider({ pinWidget: vi.fn(() => pending.promise) });
+    const showToast = vi.spyOn(toast, "showToast").mockImplementation(() => {});
+    const host = connectedHost();
+    const root = mountSolid(
+      () => (
+        <WidgetPinButton
+          target={{ board: provider, name: "widget", viewId: "view", mcpApp: false }}
+        />
+      ),
+      { container: host },
+    );
+    onTestFinished(root.unmount);
+    const button = pinButton(host)!;
+    button.focus();
+    button.click();
+    pending.reject(new Error("Synthetic pin failure"));
+    await waitForSolid(() => expect(button.title).toBe("Could not pin to dashboard. Try again."));
+    expect(pinButton(host)).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(showToast).toHaveBeenCalledExactlyOnceWith({ message: button.title });
+
+    snapshot.set({ widgets: [{ name: "widget" }] });
+    await waitForSolid(() => expect(button.title).toBe("Pinned"));
+    snapshot.set({ widgets: [] });
+    await waitForSolid(() => expect(button.title).toBe("Pin to dashboard"));
+    expect(showToast).toHaveBeenCalledTimes(1);
   });
 
   it("replaces a pin target while its previous board write is still pending", async () => {
