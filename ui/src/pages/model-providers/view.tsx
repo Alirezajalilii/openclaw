@@ -21,10 +21,7 @@ import { MODEL_SETTINGS_TARGET_IDS } from "../config/route-data.ts";
 import "../../styles/model-providers.css";
 import "../../styles/usage.css";
 import type { ModelProviderRowMessage } from "./config-mutation.ts";
-import type { DefaultModelSelection } from "./data.ts";
-import { DefaultModels, type DefaultModelsViewProps } from "./default-models-view.tsx";
-import type { ModelProvidersOwner } from "./model-providers-controller.ts";
-import type { ProviderProfilesViewProps } from "./profiles-view.tsx";
+import { DefaultModels } from "./default-models-view.tsx";
 import {
   ApiKeyInput,
   configMutationDisabled,
@@ -37,34 +34,9 @@ import {
   renderMutationMessage,
   ModelProviderConnectAction,
 } from "./view-status.tsx";
+import type { ModelProvidersViewProps } from "./view-types.ts";
 
 registerEnglishCatalog(registerSettingsEnglish);
-
-type SharedModelProvidersProps = Omit<DefaultModelsViewProps, "models" | "selection" | "message"> &
-  ProviderProfilesViewProps;
-type ModelProvidersOwnerProps = Omit<
-  ReturnType<ModelProvidersOwner["viewProps"]>["props"],
-  keyof SharedModelProvidersProps | "installedAgents" | "defaultModels" | "providerQuery"
->;
-
-export type ModelProvidersViewProps = SharedModelProvidersProps & {
-  [Key in keyof ModelProvidersOwnerProps]: Key extends "canConnect"
-    ? ModelProvidersOwnerProps[Key]
-    : ModelProvidersOwnerProps[Key] extends (...args: infer Args) => unknown
-      ? (...args: Args) => void
-      : ModelProvidersOwnerProps[Key];
-} & {
-  defaultModels: DefaultModelSelection;
-  loading: boolean;
-  catalogDiscovering: boolean;
-  catalogDiscoveryError: string | null;
-  providerDetailsReady?: boolean;
-  apiKeySaving?: Record<string, boolean>;
-  installedAgents: JSX.Element | typeof undefined;
-  providerScope?: JSX.Element;
-  accountRecovery?: JSX.Element | typeof undefined;
-  providerQuery?: string;
-};
 
 function AddProvider(props: ModelProvidersViewProps) {
   const busy = () => Boolean(props.busy.add);

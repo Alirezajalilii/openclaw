@@ -384,8 +384,8 @@ it("reads string and object defaults and preserves disabled utility", () => {
     ),
   ).toEqual({
     providers: [
-      { key: "openai", hasApiKey: true },
-      { key: "anthropic", hasApiKey: false, authMode: "oauth" },
+      { key: "openai", hasApiKey: true, apiKeyReference: false },
+      { key: "anthropic", hasApiKey: false, apiKeyReference: false, authMode: "oauth" },
     ],
     defaults: {
       primary: "openai/main",

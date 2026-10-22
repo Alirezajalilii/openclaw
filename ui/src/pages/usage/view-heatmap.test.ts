@@ -50,14 +50,15 @@ describe("renderUsageHeatmap", () => {
   it("buckets zero activity and nonzero quartiles into levels 0 through 4", () => {
     const container = mountHeatmap(
       [0, 10, 20, 30, 40].map((tokens, index) => dailyEntry(`2026-07-0${index + 5}`, tokens)),
-      "2026-07-05",
+      "2026-05-08",
       "2026-07-09",
     );
     const cells = [...container.querySelectorAll(".usage-heatmap__cell")];
-    expect(cells).toHaveLength(5);
+    expect(cells).toHaveLength(63);
+    const fixtureDays = cells.slice(-5);
     for (const [index, tokens] of [0, 10, 20, 30, 40].entries()) {
-      expect(cells[index]?.classList.contains(`usage-heatmap__cell--l${index}`)).toBe(true);
-      expect(cells[index]?.getAttribute("data-tooltip")).toContain(`${tokens} tokens`);
+      expect(fixtureDays[index]?.classList.contains(`usage-heatmap__cell--l${index}`)).toBe(true);
+      expect(fixtureDays[index]?.getAttribute("data-tooltip")).toContain(`${tokens} tokens`);
     }
   });
 
@@ -65,7 +66,7 @@ describe("renderUsageHeatmap", () => {
     const entry = dailyEntry("2026-07-09", 20);
     const container = mountHeatmap(
       [{ ...entry, usageReport: { state: "unavailable" } }],
-      "2026-07-09",
+      "2026-05-08",
       "2026-07-09",
     );
     const cell = container.querySelector(".usage-heatmap__svg .usage-heatmap__cell--l4")!;

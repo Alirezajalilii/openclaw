@@ -14,7 +14,7 @@ import { t } from "../../lib/reactive/i18n.ts";
 import type { ModelProviderCard, ModelProviderRemovalTarget } from "./data.ts";
 import { apiKeySource, profileIdentity, ProviderProfiles } from "./profiles-view.tsx";
 import { isProviderUsable, renderMutationMessage, renderProviderStatus } from "./view-status.tsx";
-import type { ModelProvidersViewProps } from "./view.tsx";
+import type { ModelProvidersViewProps } from "./view-types.ts";
 
 type ProviderRowProps = ModelProvidersViewProps & { card: ModelProviderCard };
 

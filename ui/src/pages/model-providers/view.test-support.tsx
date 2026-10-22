@@ -2,7 +2,8 @@ import { createSignal } from "solid-js";
 import { mountSolid } from "../../test-helpers/mount-solid.ts";
 import { flush } from "../../test-helpers/solid-settle.ts";
 import type { ModelProviderCard } from "./data.ts";
-import { ModelProviders, type ModelProvidersViewProps } from "./view.tsx";
+import type { ModelProvidersViewProps } from "./view-types.ts";
+import { ModelProviders } from "./view.tsx";
 
 const mountedViews = new WeakMap<HTMLElement, (props: ModelProvidersViewProps) => void>();
 
