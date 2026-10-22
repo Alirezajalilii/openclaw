@@ -6,12 +6,15 @@ import { arrive, createPet } from "./lobster-pet.test-support.ts";
 import "./solid/agent-avatar.tsx";
 import "./image-lightbox.tsx";
 
+// mock-isolation: Reject module evaluation to exercise the native lazy-face error boundary.
 vi.mock("./agent-avatar-face.tsx", () => {
   throw new Error("Synthetic face import failure");
 });
+// mock-isolation: Reject module evaluation to exercise the native lazy-menu error boundary.
 vi.mock("./lobster-pet-dismiss-menu.tsx", () => {
   throw new Error("Synthetic dismiss menu import failure");
 });
+// mock-isolation: Reject module evaluation to exercise the native lazy-lightbox error boundary.
 vi.mock("./image-lightbox-content.tsx", () => {
   throw new Error("Synthetic lightbox import failure");
 });
@@ -84,7 +87,7 @@ describe("native lazy renderer failures", () => {
     expect(button).toBeDefined();
     button!.click();
     expect(close).toHaveBeenCalledOnce();
-    expect(close.mock.calls[0][0]).toMatchObject({ bubbles: true, composed: true });
+    expect(close).toHaveBeenCalledWith(expect.objectContaining({ bubbles: true, composed: true }));
     expect(document.querySelector("openclaw-image-lightbox")).toBe(lightbox);
   });
 });
