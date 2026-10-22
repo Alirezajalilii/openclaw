@@ -435,7 +435,7 @@ export function buildGatewayCronService(params: {
     enqueueSessionEvent,
     deferSessionEvent,
     runIsolatedAgentJob: createGatewayCronAgentJobRunner({
-      deps: params.deps,
+      ...params,
       resolveCronAgent,
       resolveGatewayContext: scheduledGatewayContextResolver,
       resolvePluginRegistry: params.resolvePluginRegistry,
