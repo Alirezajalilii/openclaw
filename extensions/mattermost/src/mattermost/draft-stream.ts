@@ -78,7 +78,11 @@ export function createMattermostDraftStream(params: {
     const target = currentGeneration;
     const trimmed = text.trim();
     const normalized = trimmed
-      ? truncateWithMarker(trimmed, MATTERMOST_STREAM_MAX_CHARS, { marker: "...", reserve: 3, trimEnd: true })
+      ? truncateWithMarker(trimmed, MATTERMOST_STREAM_MAX_CHARS, {
+          marker: "...",
+          reserve: 3,
+          trimEnd: true,
+        })
       : "";
     if (!normalized) {
       return false;
