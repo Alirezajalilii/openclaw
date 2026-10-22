@@ -6,8 +6,8 @@ import type {
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { flush } from "solid-js";
 import { assert, expect, it, onTestFinished, vi } from "vitest";
-import type { ClawRouterPoolResult } from "../../../extensions/clawrouter/pool.ts";
-import plugin from "../../../extensions/clawrouter/src/control-ui.tsx";
+import type { ClawRouterPoolResult } from "../pool.ts";
+import plugin from "../src/control-ui.tsx";
 
 async function fixture() {
   const abort = new AbortController();
