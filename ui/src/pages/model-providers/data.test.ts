@@ -327,6 +327,50 @@ it("distinguishes unknown and empty catalogs for saved models", () => {
   expect(choices([], saved)[0]).toMatchObject({ available: false });
 });
 
+it.each([
+  { authProfile: "openai:account-a", tiers: ["priority", "ultrafast"] },
+  { authProfile: "openai:account-b", tiers: [] },
+])(
+  "does not lend account-scoped speed evidence to saved $authProfile",
+  ({ authProfile, tiers }) => {
+    const entry = model("gpt-5", {
+      provider: "openai",
+      available: true,
+      supportsFastMode: true,
+      serviceTiers: tiers,
+      supportsServiceTierRecovery: true,
+      serviceTierObservation: { requestedTier: "ultrafast", responseTier: "priority" },
+      serviceTierObservations: [{ requestedTier: "ultrafast", responseTier: "priority" }],
+      thinkingLevels: [{ id: "max", label: "Maximum" }],
+      runtimeChoices: [
+        { agentRuntime: { id: "codex", source: "model" }, available: true, serviceTiers: tiers },
+      ],
+    });
+    const primary = `openai/gpt-5@${authProfile}`;
+    const entries = choices([entry], modelSelection(primary));
+    const pinned = entries.find((candidate) => modelCatalogRef(candidate) === primary);
+    expect(entries[0]).toBe(entry);
+    expect(entry.serviceTiers).toEqual(tiers);
+    expect(pinned).toMatchObject({
+      provider: "openai",
+      id: "gpt-5",
+      name: entry.name,
+      thinkingLevels: entry.thinkingLevels,
+    });
+    for (const field of [
+      "available",
+      "supportsFastMode",
+      "supportsServiceTierRecovery",
+      "serviceTiers",
+      "serviceTierObservation",
+      "serviceTierObservations",
+      "runtimeChoices",
+    ]) {
+      expect(pinned).not.toHaveProperty(field);
+    }
+  },
+);
+
 it("reads string and object defaults and preserves disabled utility", () => {
   const read = (values: Record<string, unknown>, providers = {}) =>
     readModelProviderConfig({ models: { providers }, agents: { defaults: values } });
@@ -360,4 +404,31 @@ it("offers only unconfigured providers with quick API-key setup", () => {
       ["openai"],
     ),
   ).toEqual([{ id: "anthropic", displayName: "Anthropic" }]);
+});
+
+it("keeps the first usage alias label and the last alias payload", () => {
+  const cards = build([], {
+    providerUsage: {
+      updatedAt: 1,
+      providers: [
+        {
+          provider: "claude-cli",
+          displayName: "First label",
+          windows: [{ label: "old", usedPercent: 10 }],
+        },
+        {
+          provider: "anthropic",
+          displayName: "Later label",
+          windows: [{ label: "latest", usedPercent: 75 }],
+        },
+      ],
+    },
+  });
+  expect(cards).toMatchObject([
+    {
+      id: "anthropic",
+      displayName: "First label",
+      usage: { windows: [{ label: "latest", usedPercent: 75 }] },
+    },
+  ]);
 });

@@ -6,6 +6,7 @@ import {
   enqueueExecutionIdentityContextAtAdmission,
   type ExecutionIdentityAdmissionFacts,
   type ExecutionIdentityAdmissionToken,
+  type ExecutionIdentityRecoveryAdmission,
 } from "../audit/execution-identity-admission.js";
 import { executionIdentitySpawnAdmission } from "../audit/execution-identity-spawn-admission.js";
 import {
@@ -51,7 +52,12 @@ export type AdmittedRunContext = Readonly<{
 export type AdmittedRunOperatorAuthority = Readonly<{
   profileId: string;
   /** Host-captured original input; claim/occurrence owners revalidate it for continuations. */
-  recoverySnapshot?: import("../gateway/operator-run-recovery-source.js").OperatorRunRecoverySnapshot;
+  recoverySnapshot?: import("../gateway/operator-run-recovery-source.codec.js").OperatorRunRecoverySnapshot;
+  /** Existing immutable policy and link; accepted-input owners may retain them for recovery. */
+  channelRecoverySource?: Readonly<{
+    reference: import("../state/user-profiles.types.js").UserChannelAuthorizationReference;
+    modelPolicy?: PreparedOperatorModelPolicy;
+  }>;
   scopes: readonly string[];
   /** Original access dependency; null is proven independent, undefined is unclassified. */
   gatewayAccessGrant?: GatewayAccessGrantRef | null;
@@ -116,6 +122,12 @@ export function createAdmittedRunOperatorAuthority(
     profileId: source.profileId,
     recoverySnapshot: source.recoverySnapshot
       ? freezeJsonSnapshot(structuredClone(source.recoverySnapshot))
+      : undefined,
+    channelRecoverySource: source.channelRecoverySource
+      ? Object.freeze({
+          reference: Object.freeze({ ...source.channelRecoverySource.reference }),
+          modelPolicy: source.channelRecoverySource.modelPolicy,
+        })
       : undefined,
     scopes: Object.freeze([...source.scopes]),
     gatewayAccessGrant: source.gatewayAccessGrant
@@ -191,10 +203,11 @@ export function bindOperatorModelExecution(
     return undefined;
   }
   const selected = model ? { ...model } : undefined;
+  const assertModelAllowed = createOperatorModelSelectionAssertion(authority, selected);
   const mapError = (error: unknown) => mapAuthorizationError?.(error) ?? error;
   let releaseAuthority: (() => void) | undefined;
   try {
-    assertOperatorModelAllowed(authority, selected);
+    assertModelAllowed();
     releaseAuthority = authority.retain?.();
   } catch (error) {
     throw mapError(error);
@@ -207,7 +220,7 @@ export function bindOperatorModelExecution(
     }
     revoked.signal.throwIfAborted();
     try {
-      assertOperatorModelAllowed(authority, selected);
+      assertModelAllowed();
     } catch (error) {
       const failure = mapError(error);
       revoked.abort(failure);
@@ -264,6 +277,34 @@ export type PreparedAgentRunAdmission = Readonly<{
   /** Idempotently closes the exact delegated approval lease, if admission occurred. */
   close: () => void;
 }>;
+
+type PreparedRestartRecovery = Readonly<{
+  operationalRunInstance: OperationalRunInstanceRef;
+  assertCurrent: () => void;
+}>;
+
+// Existing adapters preserve this exact prepared owner through its close operation.
+const preparedRestartRecoveries = new WeakMap<
+  PreparedAgentRunAdmission["close"],
+  PreparedRestartRecovery
+>();
+
+/** Recognizes an admitted restart continuation without granting execution permission. */
+export function isPreparedRunRestartRecovery(
+  prepared: PreparedAgentRunAdmission,
+  runId: string,
+): boolean {
+  const recovery = preparedRestartRecoveries.get(prepared.close);
+  if (
+    !recovery ||
+    recovery.operationalRunInstance !== prepared.operationalRunInstance ||
+    prepared.operationalRunInstance.runId !== runId
+  ) {
+    return false;
+  }
+  recovery.assertCurrent();
+  return true;
+}
 
 type DelegatedAuthorityLease = {
   authority: AgentRunDelegatedAuthority;
@@ -466,15 +507,6 @@ export function retainAdmittedRunBeforeToolCallRecovery(
   };
 }
 
-type ExecutionIdentityRecoveryAdmission = Readonly<{
-  /** Recovery retries never manufacture replacement identity when exact evidence is absent. */
-  retryOnly: boolean;
-  consume: (runId: string) => Readonly<{
-    accepted: boolean;
-    token?: ExecutionIdentityAdmissionToken;
-  }>;
-}>;
-
 /** Creates a one-shot recovery admission owned by the durable recovery resolver. */
 export function createExecutionIdentityRecoveryAdmission(params: {
   retryOnly: boolean;
@@ -583,7 +615,7 @@ export function prepareAgentRunAdmission(params: {
     assertPreparationOpen();
     assertSource();
   });
-  return Object.freeze({
+  const prepared: PreparedAgentRunAdmission = Object.freeze({
     operationalRunInstance,
     assertSourceCurrent: Object.assign(composeSessionSourceAssertion([assertSourceCurrent]), {
       assertScopeCurrent: assertPreparationOpen,
@@ -656,6 +688,21 @@ export function prepareAgentRunAdmission(params: {
       return admitted;
     },
   });
+  if (
+    params.facts.ingress.kind === "recovery" &&
+    params.facts.ingress.boundary === "gateway.main-session-recovery"
+  ) {
+    preparedRestartRecoveries.set(prepared.close, {
+      operationalRunInstance,
+      assertCurrent: () => {
+        if (closed) {
+          throw new Error("prepared restart recovery is no longer active");
+        }
+        assertSourceCurrent?.();
+      },
+    });
+  }
+  return prepared;
 }
 
 /** Resolves a host-only continuation or validates an already-admitted internal caller. */

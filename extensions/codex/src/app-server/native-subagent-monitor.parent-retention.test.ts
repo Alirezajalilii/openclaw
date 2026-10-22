@@ -33,8 +33,6 @@ it("permits parent cold resume once every child is terminal, while preserving un
   await retainCodexAppServerLiveThread(client.client, "parent-thread");
   const monitor = new CodexNativeSubagentMonitor(client.client, runtime, {
     retainParentThread: (threadId) => protectCodexAppServerLiveThread(client.client, threadId),
-    recoveryPollDelaysMs: [],
-    completionDeliveryRetryDelaysMs: [100],
   });
   onTestFinished(async () => {
     await monitor.retireParent("parent-thread");
@@ -49,7 +47,7 @@ it("permits parent cold resume once every child is terminal, while preserving un
     releaseCodexBoundLiveThread({
       client: client.client,
       threadId: "parent-thread",
-      lifecycleTiming: createCodexThreadLifecycleTimingTracker(),
+      lifecycleTiming: createCodexThreadLifecycleTimingTracker(false),
     });
 
   await client.notify(
@@ -77,7 +75,7 @@ it("permits parent cold resume once every child is terminal, while preserving un
 
   runtime.deliverAgentHarnessCompletion.mockResolvedValue({ delivered: true, path: "direct" });
   await continued.unregister();
-  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(5_000);
   const settled = await registerParent(monitor);
   expect(settled.listPendingChildren()).toEqual([]);
   await settled.unregister();

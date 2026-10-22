@@ -75,8 +75,7 @@ instructions can be inherited by child agents. Managed relay connections retain
 parent-only personal-profile delivery. See [Codex workspace bootstrap files](/plugins/codex-harness-reference/workspace-bootstrap-files#skills-persona-and-memory-without-a-managed-relay).
 
 Files are refreshed on later turns. Reassigning the session changes personal
-context on the next new turn, not the running turn. Another participant can steer
-under the normal permission and queue rules without switching personal context.
+context on the next new turn, not the running turn. Another participant's message waits for a separate turn under their own permissions without switching the session's personal-context selection.
 Queued and collected messages from multiple people keep the session's selection;
 the current sender does not select a different file. Profile merges select the
 surviving primary ID; move the preferences to that directory yourself. OpenClaw
@@ -117,7 +116,7 @@ Authenticated users can read their own profile with `operator.read`, `operator.s
 
 A single-user Gateway gives unidentified operator connections one durable local owner profile, shared across devices and tabs, including device-token reconnects. The Gateway host account's full name fills an unset display name. A saved name is never overwritten. If no full name is available, the sidebar and Profile header show **Owner** until you set a name. Login names are not used. The owner profile has no email and does not change permissions or identity scopes. It cannot be merged with a personal profile or assigned an operator role. Sign in with a personal identity for those operations. If a build older than v2026.9.2 merged the owner profile into a person, connections stay unidentified and log a repair hint. Run `openclaw doctor --fix`, then reconnect to restore the owner identity. The person keeps their emails, role, and GitHub identities.
 
-When `gateway.roles` is configured, unidentified operators receive the owner profile only with token or password authentication. Other connections need a profile-backed sign-in for personal identity. Node, ephemeral, and synthetic connections do not receive an owner profile.
+When `gateway.roles` is configured, unidentified operators receive the owner profile only with token or password authentication. Other connections need a profile-backed sign-in for personal identity. Authenticated ephemeral operator connections, including CLI clients, retain the same durable owner even when omitted from presence. Node and synthetic connections do not receive an owner profile.
 
 The Gateway prepares its shared owner profile during startup, before accepting requests, when its authentication configuration permits owner attribution. Connections reuse the admitted profile and receive committed name changes without rereading storage. If profile preparation fails, startup logs a warning and connection admission retries it.
 

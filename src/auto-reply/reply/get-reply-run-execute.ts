@@ -14,6 +14,7 @@ import {
 import { resolveFastModeState } from "../../agents/fast-mode.js";
 import { runAgentHarnessBeforeMessageWriteHook } from "../../agents/harness/hook-helpers.js";
 import { resolveOwnerPromptNumbers } from "../../agents/owner-display.js";
+import { captureRequesterOrigin } from "../../agents/requester-origin.js";
 import { revokeRequesterCronAuthority } from "../../agents/subagents/requester-cron-authority.js";
 import {
   attachToolAllowlistIntersection,
@@ -21,7 +22,7 @@ import {
 } from "../../agents/tool-policy.js";
 import { readChannelContextAdmissionEvidence } from "../../channels/message-access/admission-evidence.js";
 import { copyChildSessionPublication } from "../../channels/message-access/child-session-publication.js";
-import { getRuntimeConfig } from "../../config/config.js";
+import { getRuntimeConfig, type OpenClawConfig } from "../../config/config.js";
 import { conversationIdentityFromMsgContext } from "../../config/sessions/conversation-identity-inbound.js";
 import { resolveGroupSessionKey } from "../../config/sessions/group.js";
 import { sessionPersonalProfileId } from "../../config/sessions/session-entry-provenance.js";
@@ -32,6 +33,7 @@ import {
   readSessionInputProfileId,
 } from "../../sessions/session-participant-input.js";
 import { MEDIA_ONLY_USER_TEXT } from "../../sessions/user-turn-media.js";
+import { readUserTurnRequesterOrigin } from "../../sessions/user-turn-transcript-admission.js";
 import {
   createUserTurnTranscriptRecorder,
   resolvePersistedUserTurnText,
@@ -44,6 +46,7 @@ import { getGroupThreadTurn } from "../group-thread-context.js";
 import { resolveInternalTurnTranscript } from "../internal-turn-source.js";
 import { getRequesterProfile } from "../requester-profile.js";
 import type { OriginatingChannelType } from "../templating.js";
+import { resolveReplyScheduledToolPolicy } from "./agent-runner-run-params.js";
 import { resolveCurrentTurnImages } from "./current-turn-images.js";
 import { resolveEffectiveReplyRoute } from "./effective-reply-route.js";
 import type { PreparedReplyRunAdmission } from "./get-reply-run-admission.js";
@@ -55,7 +58,9 @@ import {
 import { hasInboundAudio } from "./inbound-media.js";
 import { normalizeMessageTimestampMs } from "./message-timestamp.js";
 import { resolveOriginMessageProvider } from "./origin-routing.js";
+import { resolveReplySteeringIntent } from "./reply-steering-intent.js";
 import { resolveReplyToMode } from "./reply-threading.js";
+import { resolveInboundReplyToolAuthorityOverlay } from "./reply-tool-authority-inbound.js";
 import { resolveRoutedDeliveryThreadId } from "./routed-delivery-thread.js";
 import {
   bindSourceReplyDeliveryRuntime,
@@ -70,7 +75,10 @@ import {
   shouldMintChannelSourceTurnId,
 } from "./source-turn-id.js";
 
-export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) {
+export async function executePreparedReplyRun(
+  state: PreparedReplyRunAdmission,
+  readAdmissionConfig: () => OpenClawConfig,
+) {
   const {
     context,
     resolvedThinkLevel,
@@ -302,11 +310,25 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
     ...(transportReplyToId ? { replyToId: transportReplyToId } : {}),
     ...(transportThreadId ? { threadId: transportThreadId } : {}),
   };
+  const requesterOrigin =
+    readUserTurnRequesterOrigin(opts?.userTurnTranscriptRecorder) ??
+    captureRequesterOrigin({
+      ...resolveInboundReplyToolAuthorityOverlay({
+        ctx: sessionCtx,
+        sessionEntry: preparedSessionState.sessionEntry,
+        senderIsOwner: command.senderIsOwner,
+        operatorAuthority: opts?.operatorAuthority,
+        disableTools: false,
+      }),
+      sessionKey,
+      operatorProfileId: opts?.operatorAuthority?.profileId,
+    });
   const userTurnInput =
     userTurnTranscriptText !== undefined || userTurnMediaForPersistence.length > 0
       ? {
           text: userTurnTranscriptText,
           senderIsOwner: command.senderIsOwner,
+          requesterOrigin,
           ...(inputIdempotencyKey ? { idempotencyKey: inputIdempotencyKey } : {}),
           ...(inputProvenance && !isHeartbeat ? { provenance: inputProvenance } : {}),
           ...(isHeartbeat
@@ -387,7 +409,7 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
       ? (opts?.runId ?? crypto.randomUUID())
       : undefined;
   const channelRequester =
-    authorityRunId && messageProvider === "discord" && sessionCtx.SenderId
+    freshChannelCronAuthorityTurn && messageProvider === "discord" && sessionCtx.SenderId
       ? {
           version: 1 as const,
           channel: messageProvider,
@@ -404,22 +426,23 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
   const isCurrentChannelOwner = () =>
     channelOwnerAuthority?.isCurrent() ?? isConfiguredCommandOwner(getRuntimeConfig(), cronOwner);
   // Capture the authenticated source, never the later drain runner's identity.
-  // The queue assigns a new run ID after the ingress capability has settled.
+  // Queued input resolves ownership at its new admission, including owner promotion.
   const createChannelCronAuthority =
-    !inheritedCronCreatorAuthorityCapability && authorityRunId && messageProvider
-      ? (runId: string) =>
+    !inheritedCronCreatorAuthorityCapability && freshChannelCronAuthorityTurn && messageProvider
+      ? (runId: string, isCurrentOwner = isCurrentChannelOwner) =>
           createCronCreatorAuthorityCapability(
             runId,
             { kind: "external", channel: messageProvider },
-            { source: "channel-owner", isCurrent: isCurrentChannelOwner },
+            { source: "channel-owner", isCurrent: isCurrentOwner },
             undefined,
             channelRequester,
-            { isCurrent: isCurrentChannelOwner, ...cronOwner },
+            { isCurrent: isCurrentOwner, ...cronOwner },
           )
       : undefined;
   const followupRun = {
     createChannelCronAuthority,
     prompt: queuedBody,
+    readAdmissionConfig,
     sourceTurnId: resolveReplySourceTurnId({
       sourceTurnId,
       admissionRunId: sourceMessageId,
@@ -493,6 +516,10 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
       normalizeOptionalString(sessionCtx.ChatId),
     originatingChatType: replyRoute.chatType,
     run: {
+      scheduledAutomation: opts?.scheduledAutomation,
+      scheduledToolPolicy: resolveReplyScheduledToolPolicy({
+        scheduledAutomation: opts?.scheduledAutomation,
+      }),
       onOperationAdmitted: opts?.onReplyOperationAdmitted,
       internalEventExecution: opts?.internalEventExecution,
       providerReviewAcknowledgment: opts?.providerReviewAcknowledgment,
@@ -512,7 +539,11 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
       chatType: replyRoute.chatType,
       agentAccountId: replyRoute.accountId,
       conversationRoutePeerId: sessionCtx.ConversationRoutePeerId,
+      requesterOrigin,
       conversationToolPolicy: sessionCtx.ConversationToolPolicy,
+      conversationId: sessionCtx.ChatId,
+      messageThreadId: sessionCtx.MessageThreadId,
+      operatorProfileId: opts?.operatorAuthority?.profileId,
       groupId: resolveGroupSessionKey(sessionCtx)?.id,
       groupChannel:
         normalizeOptionalString(sessionCtx.GroupChannel) ??
@@ -615,6 +646,7 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
         : {}),
       extraSystemPrompt: extraSystemPromptParts.join("\n\n") || undefined,
       sourceReplyDeliveryMode,
+      bootstrapContextMode: opts?.bootstrapContextMode,
       taskSuggestionDeliveryMode: opts?.taskSuggestionDeliveryMode,
       silentReplyPromptMode,
       extraSystemPromptStatic,
@@ -658,6 +690,10 @@ export async function executePreparedReplyRun(state: PreparedReplyRunAdmission) 
   const execute = () =>
     runReplyAgent({
       ...params,
+      steeringIntent: resolveReplySteeringIntent({
+        directives: params.directives,
+        resetTriggered: effectiveResetTriggered,
+      }),
       commandBody: prefixedCommandBody,
       transcriptCommandBody,
       followupRun,
