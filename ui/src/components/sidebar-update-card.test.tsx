@@ -144,7 +144,10 @@ describe("SidebarUpdateCard", () => {
     const opening = createDeferred<boolean>();
     const element = await mount(gitUpdate, {
       compact: true,
-      onCheckStatus: vi.fn().mockReturnValueOnce(expansion.promise).mockReturnValueOnce(opening.promise),
+      onCheckStatus: vi
+        .fn()
+        .mockReturnValueOnce(expansion.promise)
+        .mockReturnValueOnce(opening.promise),
     });
     try {
       await element.expand();
@@ -157,7 +160,9 @@ describe("SidebarUpdateCard", () => {
       expect(element.action()).toBe(action);
       expect(action.disabled).toBe(true);
       opening.resolve(true);
-      await vi.waitFor(() => expect(document.querySelector("openclaw-modal-dialog")).not.toBeNull());
+      await vi.waitFor(() =>
+        expect(document.querySelector("openclaw-modal-dialog")).not.toBeNull(),
+      );
     } finally {
       document.querySelector("openclaw-modal-dialog")?.dispatchEvent(new Event("modal-cancel"));
       restoreDialog();
