@@ -585,7 +585,7 @@ describe("config form renderer", () => {
     expect(analysis.unsupportedPaths).toEqual([]);
     renderAnalyzedFormFixture(container, analysis, { value: { [key]: value }, onPatch });
     expectElement(
-      container.querySelector(".cfg-map button[aria-label='Remove entry']"),
+      container.querySelector(".cfg-map button[aria-label^='Remove entry: ']"),
       "map remove button",
     ).dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onPatch).toHaveBeenCalledWith([key], {});
