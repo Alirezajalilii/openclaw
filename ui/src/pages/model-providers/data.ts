@@ -6,6 +6,7 @@ import type {
   ProviderUsageSnapshot,
   UsageSummary,
 } from "../../../../src/infra/provider-usage.types.js";
+import type { SessionModelUsage } from "../../../../src/infra/session-cost-usage.types.js";
 import type {
   AgentsListResult,
   FastMode,
@@ -38,19 +39,23 @@ type ModelProviderAuthSummary = {
   expiryLabel?: string;
 };
 
+type ModelProviderLocalCost = {
+  usageReport?: SessionModelUsage["totals"]["usageReport"];
+  totalCost: number;
+  totalTokens: number;
+  messageCount: number;
+};
+
 export type ModelProviderLogoutTarget = {
   provider: string;
   profileIds: string[];
 };
 
-/** A provider-wide sign-out, or the config API key alone when `credentialType` is set. */
-export type ModelProviderRemovalTarget = { provider: string; credentialType?: "api_key" };
-
-/** One account's sign-out, or every credential OpenClaw holds for a provider. */
-export type ModelProviderPendingLogout = { cardId: string; label: string } & (
-  | { target: ModelProviderLogoutTarget }
-  | { removeTargets: ModelProviderRemovalTarget[]; keptSource?: string }
-);
+export type ModelProviderPendingLogout = {
+  cardId: string;
+  label: string;
+  target: ModelProviderLogoutTarget;
+};
 
 type ModelProviderProfileOrderLock = NonNullable<ModelAuthStatusProvider["profileOrderLocked"]>;
 
@@ -86,6 +91,8 @@ export type ModelProviderCard = {
   checkingModels?: boolean;
   /** Live provider-reported usage (quota windows, billing, cost history). */
   usage?: ProviderUsageSnapshot;
+  /** Locally-computed session spend for the requested window. */
+  localCost?: ModelProviderLocalCost;
 };
 
 type ConfiguredModelProvider = { key: string; hasApiKey: boolean; authMode?: string };
@@ -97,6 +104,7 @@ type ModelProviderCardsInput = {
   pendingProviders?: readonly string[];
   configProviders?: ConfiguredModelProvider[];
   providerUsage: UsageSummary | null;
+  costByProvider: SessionModelUsage[] | null;
 };
 
 type CardDraft = {
@@ -167,6 +175,46 @@ function addLogoutTarget(
     return;
   }
   existing.profileIds = [...new Set([...existing.profileIds, ...profileIds])];
+}
+
+export function collectProviderUsage(
+  summary: UsageSummary | null,
+): Map<string, { displayName: string; snapshot: ProviderUsageSnapshot }> {
+  const result = new Map<string, { displayName: string; snapshot: ProviderUsageSnapshot }>();
+  for (const snapshot of summary?.providers ?? []) {
+    const id = canonicalModelAuthProviderId(snapshot.provider);
+    if (id) {
+      result.set(id, {
+        displayName: result.get(id)?.displayName ?? snapshot.displayName,
+        snapshot,
+      });
+    }
+  }
+  return result;
+}
+
+export function collectProviderLocalCost(
+  entries: SessionModelUsage[] | null,
+): Map<string, ModelProviderLocalCost> {
+  const result = new Map<string, ModelProviderLocalCost>();
+  for (const entry of entries ?? []) {
+    const id = canonicalModelAuthProviderId(entry.provider ?? "");
+    if (!id) {
+      continue;
+    }
+    let cost = result.get(id);
+    if (!cost) {
+      cost = { totalCost: 0, totalTokens: 0, messageCount: 0 };
+      result.set(id, cost);
+    }
+    cost.totalCost += entry.totals.totalCost;
+    cost.totalTokens += entry.totals.totalTokens;
+    cost.messageCount += entry.count;
+    if (entry.totals.usageReport?.state === "unavailable") {
+      cost.usageReport = entry.totals.usageReport;
+    }
+  }
+  return result;
 }
 
 /**
@@ -339,14 +387,13 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
     }
   }
 
-  for (const snapshot of input.providerUsage?.providers ?? []) {
-    const draft = providerDraft(snapshot.provider, snapshot.displayName);
-    if (!draft) {
-      continue;
-    }
-    // usage.status snapshots carry cost history and errors that the
-    // auth-status embed drops, so they win when both are present.
-    draft.card.usage = snapshot;
+  for (const [id, { displayName, snapshot }] of collectProviderUsage(input.providerUsage)) {
+    // Live usage includes cost history and errors omitted by auth-status embeds.
+    ensureDraft(drafts, id, displayName || providerDisplayLabel(id)).card.usage = snapshot;
+  }
+
+  for (const [id, localCost] of collectProviderLocalCost(input.costByProvider)) {
+    ensureDraft(drafts, id, providerDisplayLabel(id)).card.localCost = localCost;
   }
 
   return drafts
@@ -359,7 +406,9 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
         Boolean(draft.card.usage) ||
         draft.card.modelCount > 0 ||
         Boolean(draft.catalogOutcome) ||
-        draft.card.checkingModels,
+        draft.card.checkingModels ||
+        (draft.card.localCost?.totalTokens ?? 0) > 0 ||
+        draft.card.localCost?.usageReport?.state === "unavailable",
     )
     .map((draft) => {
       const apiKeySupported = apiKeyCapabilities.get(draft.card.id);
@@ -452,7 +501,21 @@ function buildSelectableDefaultModels(
     if (profile) {
       const match = (models ?? []).find((model) => modelCatalogRef(model) === modelRef);
       if (match) {
-        selectable.push({ ...match, selectionRef: ref });
+        // The agent-scoped catalog does not establish readiness or speed tiers for
+        // a saved account pin. Keep model metadata, not another account's evidence.
+        const {
+          available: _available,
+          unavailableReason: _reason,
+          unavailableUntil: _until,
+          supportsFastMode: _fastMode,
+          supportsServiceTierRecovery: _recovery,
+          serviceTiers: _tiers,
+          serviceTierObservation: _observation,
+          serviceTierObservations: _observations,
+          runtimeChoices: _runtimes,
+          ...unscoped
+        } = match;
+        selectable.push({ ...unscoped, selectionRef: ref });
         continue;
       }
     }

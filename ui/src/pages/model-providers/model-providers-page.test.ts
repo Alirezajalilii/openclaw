@@ -6,7 +6,7 @@ import type { ModelsProbeResult } from "../../api/types.ts";
 import { createAgentSelectionCapability } from "../../app/agent-selection.ts";
 import type { SelectPicker } from "../../components/select-picker.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
-import "../../lib/toast-host.ts";
+import "../../lib/toast-host.tsx";
 import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
 import { choosePickerValue, openPicker, updatePickers } from "../../test-helpers/select-picker.ts";
 import { waitForSolid } from "../../test-helpers/solid-settle.ts";
@@ -26,7 +26,6 @@ import {
   requestCount,
   saveKey,
   openApiKeyProvider,
-  expandProvider,
 } from "./model-providers-page.test-support.tsx";
 
 afterEach(() => {
@@ -58,7 +57,7 @@ describe("ModelProvidersPage agent scope", () => {
       selectionIntentRevision: context.settingsAgentSelection.intentRevision,
       data: {
         ...EMPTY_MODEL_PROVIDERS_DATA,
-        providerUsage: { ok: false as const, error: { kind: "request-failed" as const } },
+        providerUsage: { ok: false as const },
         updatedAt: Date.now(),
       },
       client: snapshot.client,
@@ -101,19 +100,7 @@ describe("ModelProvidersPage agent scope", () => {
     document.dispatchEvent(new Event("visibilitychange"));
 
     await vi.waitFor(() => expect(requestCount(request, "usage.status")).toBe(2));
-    await waitForSolid(() => expect(page.view.props.providerUsageFailed).toBe(false));
-  });
-
-  it("opens the Usage page from provider access", async () => {
-    const { context } = createHarness("main");
-    const page = appendPage(context);
-    await waitForProviders(page);
-
-    [...page.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "View usage")
-      ?.click();
-
-    expect(context.navigate).toHaveBeenCalledExactlyOnceWith("usage");
+    await waitForSolid(() => expect(page.view.props.supplementalLoading).toBe(false));
   });
 
   it("does not readopt an old route snapshot when only loader pending changes", async () => {
@@ -148,8 +135,7 @@ describe("ModelProvidersPage agent scope", () => {
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     const page = appendPage(context);
     await waitForProviders(page);
-    await vi.waitFor(() => expect(requestCount(request, "usage.status")).toBe(1));
-    await drainPageUpdates(page);
+    await waitForSolid(() => expect(page.view.props.supplementalLoading).toBe(false));
     const previousData = page.view.props.authStatus;
     const originalRequest = request.getMockImplementation()!;
     request.mockImplementation(async (method: string) => {
@@ -288,7 +274,7 @@ describe("ModelProvidersPage agent scope", () => {
 
     const page = appendPage(context);
     await waitForSolid(() => expect(page.view.props.authStatus?.providers).toHaveLength(1));
-    await expandProvider(page, "openai");
+    await page.updateComplete;
 
     expect(page.querySelector(".model-providers__profiles")).toBeNull();
     expect(page.renderRoot.textContent).not.toContain("owner@example.com");
@@ -342,7 +328,7 @@ describe("ModelProvidersPage agent scope", () => {
       );
       await drainPageUpdates(page);
       expect(page.view.props.authStatus).toBeNull();
-      expect(page.view.props.refreshing).toBe(false);
+      expect(page.view.props.coreReceipt).toBeNull();
       expect(page.renderRoot.textContent).not.toContain("retired@example.test");
 
       request.mockImplementation(originalRequest);
@@ -510,12 +496,11 @@ describe("ModelProvidersPage agent scope", () => {
     });
     await page.updateComplete;
     expect(page.renderRoot.textContent).toContain(page.view.props.messages.openai?.warning);
+    expect(page.view.props.error).toBeNull();
+    expect(page.querySelector(".model-providers__provider-list .provider-usage-error")).toBeNull();
   });
 
-  it("removes a provider only after confirmation and reports the Gateway warning", async () => {
-    const shell = document.body.appendChild(document.createElement("div"));
-    shell.className = "shell";
-    const toast = shell.appendChild(document.createElement("openclaw-toast-host"));
+  it("removes stored API keys through the rendered action and retains its warning", async () => {
     const { context, request, runtimeConfig } = createHarness("main");
     const page = appendPage(context);
     await waitForProviders(page);
@@ -526,22 +511,19 @@ describe("ModelProvidersPage agent scope", () => {
         ? { removedProfiles: ["openai:key"], warning: "Authentication refresh failed." }
         : originalRequest(method),
     );
-    const row = await expandProvider(page, "openai");
-    row.querySelector<HTMLButtonElement>(".provider-row__remove")!.click();
-    const modal = await vi.waitFor(() => {
-      const dialog = document.body.querySelector<HTMLElement>("openclaw-modal-dialog");
-      expect(dialog).not.toBeNull();
-      return dialog!;
+    await page.updateComplete;
+    page.querySelector<HTMLButtonElement>(".model-providers__card-actions .danger")!.click();
+    await waitForSolid(() => expect(page.view.props.messages.openai?.kind).toBe("success"));
+    expect(request).toHaveBeenCalledWith("models.authLogout", {
+      provider: "openai",
+      agentId: "main",
+      credentialType: "api_key",
     });
-    expect(modal.textContent).toContain("Remove OpenAI");
-    expect(requestCount(request, "models.authLogout")).toBe(0);
-    modal.querySelector<HTMLButtonElement>("button.danger")!.click();
-    await waitForSolid(() => expect(toast.textContent).toContain("Authentication refresh failed."));
-    // The saved API-key profile is a provider-wide sign-out; nothing goes through config.
-    expect(request.mock.calls.filter(([method]) => method === "models.authLogout")).toEqual([
-      ["models.authLogout", { provider: "openai", agentId: "main" }],
-    ]);
     expect(runtimeConfig.patch).not.toHaveBeenCalled();
+    expect(page.view.props.messages.openai).toMatchObject({
+      text: "Saved API keys removed.",
+      warning: "Authentication refresh failed.",
+    });
   });
 
   it("keeps committed provider-add feedback visible when its refresh fails", async () => {
@@ -589,7 +571,7 @@ describe("ModelProvidersPage agent scope", () => {
     settingsAgentSelection.state.selectedId = "writer";
     settingsAgentSelection.state.scopeId = "writer";
     notifySelection();
-    await vi.waitFor(() => expect(page.view.props.credentialAgentLabel).toBe("Writer"));
+    await vi.waitFor(() => expect(page.view.props.usageAgentId).toBe("writer"));
     runtimeConfig.ensureLoaded.mockImplementationOnce(() => replacementGate.promise);
     page.view.props.onUtilityChange("openai/gpt-4.1-mini");
     gate.resolve();
@@ -617,7 +599,7 @@ describe("ModelProvidersPage agent scope", () => {
     settingsAgentSelection.state.selectedId = "writer";
     settingsAgentSelection.state.scopeId = "writer";
     notifySelection();
-    await vi.waitFor(() => expect(page.view.props.credentialAgentLabel).toBe("Writer"));
+    await vi.waitFor(() => expect(page.view.props.usageAgentId).toBe("writer"));
     page.view.props.onOpenKeyEditor("anthropic");
     page.view.props.onKeyDraftChange("writer-agent-unsaved-key");
     gate.resolve();
@@ -658,7 +640,7 @@ describe("ModelProvidersPage agent scope", () => {
     settingsAgentSelection.state.selectedId = "writer";
     settingsAgentSelection.state.scopeId = "writer";
     notifySelection();
-    await vi.waitFor(() => expect(page.view.props.credentialAgentLabel).toBe("Writer"));
+    await vi.waitFor(() => expect(page.view.props.usageAgentId).toBe("writer"));
     await openApiKeyProvider(page, "anthropic");
     page.view.props.onAddProviderKeyChange("shared-provider-key");
     gate.resolve({ profileId: "anthropic:manual-api-key" });
@@ -691,7 +673,7 @@ describe("ModelProvidersPage agent scope", () => {
     settingsAgentSelection.state.selectedId = "writer";
     settingsAgentSelection.state.scopeId = "writer";
     notifySelection();
-    await vi.waitFor(() => expect(page.view.props.credentialAgentLabel).toBe("Writer"));
+    await vi.waitFor(() => expect(page.view.props.usageAgentId).toBe("writer"));
     await waitForProviders(page);
     page.view.props.onProfileOrderChange("openai", "openai", ["openai:one", "openai:two"]);
 
@@ -722,13 +704,31 @@ describe("ModelProvidersPage agent scope", () => {
       authStatus: createAuthStatus(),
       updatedAt: 1,
     });
-    await expandProvider(page, "openai");
-    request.mockRejectedValueOnce(new Error("Priority could not be saved"));
+    await page.updateComplete;
+    const original = request.getMockImplementation()!;
+    let rejectOrder = true;
+    request.mockImplementation(async (method, ...args) => {
+      if (method === "models.authOrderSet" && rejectOrder) {
+        rejectOrder = false;
+        throw new Error("Priority could not be saved");
+      }
+      return original(method, ...args);
+    });
     page
       .querySelector<HTMLButtonElement>(
         '[data-profile-id="openai:two"] .model-providers__profile-grip',
       )!
       .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith("models.authOrderSet", {
+        provider: "openai",
+        profileIds: ["openai:two", "openai:one"],
+        agentId: "main",
+      }),
+    );
+    await vi.waitFor(() => expect(toast.toast?.message).toBe("Priority could not be saved"));
+    await toast.updateComplete;
+    await vi.dynamicImportSettled();
     await vi.waitFor(() =>
       expect(toast.querySelector('[role="status"]')?.textContent).toContain(
         "Priority could not be saved",
@@ -785,7 +785,7 @@ describe("ModelProvidersPage agent scope", () => {
     await waitForSolid(() =>
       expect(request).toHaveBeenCalledWith("models.authStatus", { agentId: "writer" }),
     );
-    expect(page.view.props.credentialAgentLabel).toBe("Writer");
+    expect(page.view.props.usageAgentId).toBe("writer");
     expect(page.view.props.updatedAt).not.toBe(staleData.updatedAt);
   });
 
@@ -823,11 +823,11 @@ describe("ModelProvidersPage agent scope", () => {
     settingsAgentSelection.state.selectedId = "writer";
     settingsAgentSelection.state.scopeId = "writer";
     notifySelection();
-    await vi.waitFor(() => expect(page.view.props.credentialAgentLabel).toBe("Writer"));
+    await vi.waitFor(() => expect(page.view.props.usageAgentId).toBe("writer"));
     settingsAgentSelection.state.selectedId = "main";
     settingsAgentSelection.state.scopeId = "main";
     notifySelection();
-    await vi.waitFor(() => expect(page.view.props.credentialAgentLabel).toBe("Main"));
+    await vi.waitFor(() => expect(page.view.props.usageAgentId).toBe("main"));
     firstProbe.resolve({ provider: "anthropic", status: "ok", results: [] });
     await drainPageUpdates(page);
 
@@ -866,18 +866,24 @@ it("finishes loading with a system-only roster and keeps global defaults editabl
       '.model-providers__defaults .settings-segmented[role="radiogroup"]',
     );
     expect(groups).toHaveLength(2);
-    const thinkingHigh = groups[0]!.querySelector<HTMLInputElement>(
-      '.settings-segmented__input[value="high"]',
+    expect(groups[0]!.querySelector('.settings-segmented__input[value="high"]')).toBeNull();
+    const savedThinking = groups[0]!.querySelector<HTMLInputElement>(
+      '.settings-segmented__input[value="low"]',
     )!;
-    expect(thinkingHigh.disabled).toBe(false);
-    thinkingHigh.click();
+    expect(savedThinking.checked).toBe(true);
+    expect(savedThinking.disabled).toBe(true);
+    const thinkingDefault = groups[0]!.querySelector<HTMLInputElement>(
+      '.settings-segmented__input[value=""]',
+    )!;
+    expect(thinkingDefault.disabled).toBe(false);
+    thinkingDefault.click();
     await waitForSolid(() => expect(runtimeConfig.patch).toHaveBeenCalledOnce());
     expect(runtimeConfig.patch).toHaveBeenCalledWith({
       raw: {
         agents: {
           defaults: {
             fastModeDefault: "auto",
-            thinkingDefault: "high",
+            thinkingDefault: null,
             utilityModel: null,
           },
         },
