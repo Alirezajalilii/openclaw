@@ -297,7 +297,7 @@ const enSessionOrganization = {
     archiveSessionNestedOther:
       '"{session}" has {count} directly nested sessions. If you archive only this session, those nested sessions move to the top level.',
     archiveThisSession: "Archive only this session",
-    archiveWithNestedSessions: "Archive with nested sessions",
+    archiveAllSessions: "Archive all ({count})",
     moveToTopLevel: en.sessionsView.moveToTopLevel,
     archiveTreeRootRequired:
       "Archive a persistent conversation and its children, not a hidden worker run.",

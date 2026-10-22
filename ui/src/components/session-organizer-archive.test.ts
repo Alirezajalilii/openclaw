@@ -121,7 +121,7 @@ describe("session organizer nested archive choice", () => {
         '"Batch 0" has 1 directly nested session. If you archive only this session, that nested session moves to the top level.',
       );
       expect(document.body.textContent).toContain(t("sessionsView.archiveRunningSessions"));
-      expect(actions.textContent).toContain("Archive with nested sessions");
+      expect(actions.textContent).toContain(`Archive all (${count})`);
       expect(harness.patch).not.toHaveBeenCalled();
       expect(harness.request).not.toHaveBeenCalled();
       answerConfirmDialog(actions, choice);

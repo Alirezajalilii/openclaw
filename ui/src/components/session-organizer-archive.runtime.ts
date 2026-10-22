@@ -146,7 +146,7 @@ export async function confirmSessionArchive(
           (rows.some(hasActiveArchiveWork)
             ? "\n\n" + t("sessionsView.archiveRunningSessions")
             : ""),
-        confirmLabel: t("sessionsView.archiveWithNestedSessions"),
+        confirmLabel: t("sessionsView.archiveAllSessions", { count: String(rows.length) }),
         alternativeLabel: t("sessionsView.archiveThisSession"),
         signal: scope.signal,
       });

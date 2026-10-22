@@ -72,10 +72,10 @@ async function archivedKeys(gateway: Gateway, methods = ["sessions.patch", "sess
 suite.define(() =>
   it.each([
     { action: "Archive only this session", childCount: 1, keys: [parentKey] },
-    { action: "Archive with nested sessions", childCount: 1, keys: [childKey, parentKey] },
+    { action: "Archive all (2)", childCount: 1, keys: [childKey, parentKey] },
     { action: "Cancel", childCount: 1, keys: [] },
     {
-      action: "Archive with nested sessions",
+      action: "Archive all (3)",
       childCount: 2,
       keys: [siblingKey, childKey, parentKey],
     },
@@ -90,7 +90,7 @@ suite.define(() =>
           )
           .toBe(true);
         expect(
-          await ui.button(modal, "Archive with nested sessions").getAttribute("class"),
+          await ui.button(modal, `Archive all (${childCount + 1})`).getAttribute("class"),
         ).toContain("primary");
         expect(
           await ui.button(modal, "Archive only this session").getAttribute("class"),
