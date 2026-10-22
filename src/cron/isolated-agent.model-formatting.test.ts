@@ -36,12 +36,10 @@ import { resolveCronAgentConfig } from "./isolated-agent/run-config.js";
 type SelectionParams = Parameters<typeof resolveCronModelSelection>[0];
 const defaultRef = { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL };
 const selectedRef = { provider: "openai", model: "gpt-4.1-mini" };
-const payload = { kind: "agentTurn", message: "do it" } as const;
 const select = (overrides: Partial<SelectionParams> = {}) =>
   resolveCronModelSelection({
     cfg: {},
     sessionEntry: {},
-    payload,
     isGmailHook: false,
     agentDir: "/tmp/agent",
     workspaceDir: "/tmp/workspace",
@@ -95,9 +93,7 @@ describe("cron model selection", () => {
     },
   ])("reports explicit payload rejection: $expected", async ({ error, cfg, agentId, expected }) => {
     mocks.allowed.mockReturnValueOnce({ error });
-    await expect(
-      select({ cfg, agentId, payload: { ...payload, model: "openai/gpt-4.1-mini" } }),
-    ).resolves.toEqual({
+    await expect(select({ cfg, agentId, payloadModel: "openai/gpt-4.1-mini" })).resolves.toEqual({
       ok: false,
       error: `automation model override 'openai/gpt-4.1-mini' ${expected}`,
     });
@@ -131,7 +127,7 @@ describe("cron model selection", () => {
     await expect(
       select({
         cfg,
-        payload: { ...payload, model: "  openai/gpt-4.1-mini  " },
+        payloadModel: "  openai/gpt-4.1-mini  ",
         sessionEntry: { providerOverride: "anthropic", modelOverride: "claude-sonnet-4-6" },
       }),
     ).resolves.toMatchObject({ ok: true, ...selectedRef, owner, modelSource: "payload" });

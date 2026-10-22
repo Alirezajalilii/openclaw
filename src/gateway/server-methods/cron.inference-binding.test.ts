@@ -418,6 +418,18 @@ async function createFixture(stateDir: string, agentDir: string) {
       };
       setRuntimeConfigSnapshot(cfg);
     },
+    setScheduledProfile(profileId: string, scope: "agent" | "default", allowed: boolean) {
+      const subagents = { model: "openai/gpt-4o@" + profileId };
+      cfg.agents!.defaults!.modelPolicy = {
+        allow: allowed ? ["openai/gpt-4.1", "openai/gpt-4o"] : ["openai/gpt-4.1"],
+      };
+      if (scope === "agent") {
+        cfg.agents!.entries!.main!.subagents = subagents;
+      } else {
+        cfg.agents!.defaults!.subagents = subagents;
+      }
+      setRuntimeConfigSnapshot(cfg);
+    },
     async changeDefaults(profileId: string) {
       cfg = {
         ...cfg,
@@ -803,6 +815,33 @@ describe("cron handler inference binding persistence", () => {
           profileId,
           authRequirement: requirement,
           source: "user",
+        });
+      });
+    },
+  );
+
+  it.each([
+    { scope: "agent", allowed: true },
+    { scope: "default", allowed: true },
+    { scope: "agent", allowed: false },
+  ] as const)(
+    "records the effective account for an $scope scheduled model (allowed: $allowed)",
+    async ({ scope, allowed }) => {
+      await withFixture(async (fixture) => {
+        await fixture.setCreator(platformId);
+        fixture.setScheduledProfile(subscriptionId, scope, allowed);
+        await fixture.invoke(
+          "cron.add",
+          createParams(),
+          createCronCallerClient("main", undefined, sessionKey),
+        );
+        const created = await fixture.reload();
+        expect(created.payload).not.toHaveProperty("model");
+        expect(created.inferenceBinding).toMatchObject({
+          provider: "openai",
+          profileId: allowed ? subscriptionId : platformId,
+          authRequirement: allowed ? "subscription" : "api-key",
+          source: allowed ? "user" : "auto",
         });
       });
     },

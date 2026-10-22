@@ -1,3 +1,4 @@
+import { resolveAgentConfig } from "../agents/agent-scope.js";
 import {
   AuthProfileAuthorizationError,
   type AuthProfileAuthorization,
@@ -10,11 +11,14 @@ import { resolveProviderModelAuthPolicy } from "../agents/model-auth-policy.js";
 import { resolveCliRuntimeExecutionProvider } from "../agents/model-runtime-aliases.js";
 import { isConfiguredKeyAuthSource } from "../agents/provider-model-auth-source-plan.js";
 import { prepareAgentRuntimeAuth } from "../agents/runtime-plan/prepare-auth.js";
-import { resolveSimpleCompletionSelectionForAgent } from "../agents/simple-completion-selection.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { workerInferencePlacement } from "../gateway/worker-environments/inference-placement.js";
 import type { CronInferenceBinding } from "./inference-binding.js";
+import {
+  resolveCronModelSelection,
+  resolveCronModelSelectionOwner,
+} from "./isolated-agent/model-selection.js";
 
 /** Capture only a selected, current credential owner; never infer a legacy job's history. */
 export async function captureCronInferenceBinding(params: {
@@ -25,10 +29,26 @@ export async function captureCronInferenceBinding(params: {
   authorizeProfile?: (profileId: string, inherited: boolean) => Promise<(() => void) | undefined>;
   retainAuthorization?: (authority: AuthProfileAuthorization) => void;
 }): Promise<CronInferenceBinding | undefined> {
-  const { cfg, agentId } = params;
-  const model = resolveSimpleCompletionSelectionForAgent({ cfg, agentId, modelRef: params.model });
-  if (!model) {
-    throw new Error("Automation model could not be resolved.");
+  const owner = await resolveCronModelSelectionOwner({
+    cfg: params.cfg,
+    agentId: params.agentId,
+    requiredAgentId: params.agentId,
+  });
+  const { config: cfg, agentId, agentDir, workspaceDir } = owner;
+  const model = await resolveCronModelSelection({
+    cfg,
+    owner,
+    agentConfigOverride: resolveAgentConfig(cfg, agentId),
+    agentId,
+    agentDir,
+    workspaceDir,
+    payloadModel: params.model,
+    // The creator supplies auth inheritance, not the scheduled execution model.
+    sessionEntry: {},
+    isGmailHook: false,
+  });
+  if (!model.ok) {
+    throw new Error(model.error);
   }
   // CLI backends own their login; a host profile cannot bind that account.
   if (
@@ -36,7 +56,7 @@ export async function captureCronInferenceBinding(params: {
       cfg,
       agentId,
       provider: model.provider,
-      modelId: model.modelId,
+      modelId: model.model,
     })
   ) {
     return undefined;
@@ -46,15 +66,14 @@ export async function captureCronInferenceBinding(params: {
     params.sessionEntry?.providerOverride ?? params.sessionEntry?.modelProvider;
   const creatorSession =
     creatorProvider && creatorProvider !== model.provider ? undefined : params.sessionEntry;
-  const { agentDir } = model;
   let selection = await resolveSessionAuthSelection({
     cfg,
     agentId,
     agentDir,
     provider: model.provider,
-    modelId: model.modelId,
-    configuredProfileId: model.profileId ?? creatorSession?.authProfileOverride,
-    sessionEntry: model.profileId ? undefined : creatorSession,
+    modelId: model.model,
+    configuredProfileId: model.configuredProfileId ?? creatorSession?.authProfileOverride,
+    sessionEntry: model.configuredProfileId ? undefined : creatorSession,
     isNewSession: false,
   });
   const requiredProfileId = cfg.cloudWorkers?.requiredProfile;
@@ -81,13 +100,13 @@ export async function captureCronInferenceBinding(params: {
     // With no compatible creator account, use the same route-aware planner as a fresh run.
     const harness = resolveAgentHarnessSelectionDecision({
       provider: model.provider,
-      modelId: model.modelId,
+      modelId: model.model,
       config: cfg,
       agentId,
     });
     const [attempt] = prepareAgentRuntimeAuth({
       provider: model.provider,
-      modelId: model.modelId,
+      modelId: model.model,
       config: cfg,
       agentId,
       agentDir,
@@ -114,7 +133,7 @@ export async function captureCronInferenceBinding(params: {
   }
   const assertSelectionCurrent = await params.authorizeProfile?.(
     selection.profileId,
-    !model.profileId && selection.profileId === creatorSession?.authProfileOverride,
+    !model.configuredProfileId && selection.profileId === creatorSession?.authProfileOverride,
   );
   const credential = store.profiles[selection.profileId];
   if (!credential) {
@@ -148,7 +167,7 @@ export async function captureCronInferenceBinding(params: {
       authorizationId: authority.authorizationId,
       authRequirement,
       source:
-        model.profileId ||
+        model.configuredProfileId ||
         creatorSession?.authProfileOverrideSource === "user" ||
         creatorSession?.authProfileOverrideSource === "user-link" ||
         (!creatorSession?.authProfileOverride && selection.source === "user")
