@@ -88,7 +88,7 @@ it("retires an Inbox import failure when its route changes", async () => {
   loadFailure.mockReturnValue(pending.promise);
   const { element, trigger } = await mountAttention();
   trigger.click();
-  element.activeRouteId = "config";
+  Object.assign(element, { activeRouteId: "config" });
   pending.reject(new Error("Retired Inbox import"));
   await pending.promise.catch(() => undefined);
   await waitForSolid(() => expect(showToast).not.toHaveBeenCalled());
