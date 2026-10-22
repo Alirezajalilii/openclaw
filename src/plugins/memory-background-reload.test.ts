@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
+import type { MemorySyncParams } from "../../packages/memory-host-sdk/src/host/types.js";
 import type { MemoryWorkspaceFiles } from "../../packages/memory-host-sdk/src/host/workspace-files.js";
 import { withinTest } from "../../test/helpers/promise.js";
 import {
@@ -83,6 +84,12 @@ const { clearRuntimeConfigSnapshot, setRuntimeConfigSnapshot } = loadNativeHost(
   "src/config/runtime-snapshot.ts",
 ) as typeof import("../config/runtime-snapshot.js");
 
+type BackgroundMemoryManager = RegisteredMemorySearchManager & {
+  syncBackground: (this: BackgroundMemoryManager, params: MemorySyncParams) => Promise<void>;
+  listSessionCorpusEntries(): Promise<unknown[]>;
+  awaitManagerIdle(): Promise<void>;
+  runSessionStartupCatchup(): Promise<string[]>;
+};
 type RegistryHost = ReturnType<typeof createPluginRegistry>;
 type SyncReason = "watch" | "session-delta" | "session-startup-catchup";
 type MemorySearchSettings = NonNullable<NonNullable<OpenClawConfig["memory"]>["search"]>;
@@ -120,7 +127,7 @@ async function openManager(
   assert(opened.manager, opened.error ?? "Expected memory manager");
   const manager = opened.manager;
   const raw = getPluginOriginalValue(manager, memory.instance) ?? manager;
-  return { manager, raw, prototype: Object.getPrototypeOf(raw) as RegisteredMemorySearchManager };
+  return { manager, raw, prototype: Object.getPrototypeOf(raw) as BackgroundMemoryManager };
 }
 
 function registryHost() {
@@ -220,11 +227,11 @@ it("retires live watchers and starts successor indexing without a search or turn
     closeInitial = async () => {
       await prototype.close?.call(raw);
     };
-    const sync = prototype.sync;
-    assert(sync);
+    // Watch notifications enter the background owner, not the public sync method.
+    const sync = prototype.syncBackground;
     const indexedChunks = createDeferredCore<number | undefined>();
-    const observed = vi.spyOn(prototype, "sync").mockImplementation(function (
-      this: RegisteredMemorySearchManager,
+    const observed = vi.spyOn(prototype, "syncBackground").mockImplementation(function (
+      this: BackgroundMemoryManager,
       params,
     ) {
       const work = sync.call(this, params);
@@ -307,9 +314,10 @@ it("restarts memory watchers after reload waits for active indexing past its sto
   let services: PluginServicesHandle | undefined;
   try {
     const initiallyWatching = watch.nextSubscription();
+    // Establish live index demand before the service restores previously watched agents.
+    const { manager } = await openManager(memory, config);
     services = await startPluginServices({ registry: host.registry, config });
     await withinTest(initiallyWatching, signal);
-    const { manager } = await openManager(memory, config);
     await manager.sync?.({ reason: "startup-settled" });
     await fs.mkdir(path.join(state.workspaceDir, "memory"), { recursive: true });
     await fs.writeFile(
@@ -352,10 +360,7 @@ it("retires Memory Core while session startup discovery is in flight", async ({ 
   try {
     // A transient manager exposes the shared prototype without scheduling startup work.
     const probe = await openManager(memory, config, "main", "cli");
-    const discovery = probe.prototype as RegisteredMemorySearchManager & {
-      listSessionCorpusEntries(): Promise<unknown[]>;
-      awaitManagerIdle(): Promise<void>;
-    };
+    const discovery = probe.prototype;
     await probe.manager.close?.();
     const listed = createDeferredCore();
     const closing = createDeferredCore();
@@ -497,11 +502,11 @@ it.for([false, true])(
       const boot = await inTurn(() => openManager(memory, config("bootstrap"), "bootstrap", "cli"));
       managers.add(boot.manager);
       const { prototype } = boot;
-      const sync = prototype.sync;
-      assert(sync);
+      // Observe the real producer shared by startup, session updates, and watchers.
+      const sync = prototype.syncBackground;
       const completions = new Map<string, ReturnType<typeof createDeferredCore<Promise<void>>>>();
-      vi.spyOn(prototype, "sync").mockImplementation(function (
-        this: RegisteredMemorySearchManager,
+      vi.spyOn(prototype, "syncBackground").mockImplementation(function (
+        this: BackgroundMemoryManager,
         params,
       ) {
         const work = sync.call(this, params);
@@ -511,9 +516,7 @@ it.for([false, true])(
         return work;
       });
       const startupCompletions = new WeakMap<object, Promise<string[]>>();
-      const startupOwner = prototype as RegisteredMemorySearchManager & {
-        runSessionStartupCatchup(): Promise<string[]>;
-      };
+      const startupOwner = prototype;
       // oxlint-disable-next-line typescript/unbound-method -- The observer forwards the actual manager receiver with call().
       const startup = startupOwner.runSessionStartupCatchup;
       vi.spyOn(startupOwner, "runSessionStartupCatchup").mockImplementation(function (
