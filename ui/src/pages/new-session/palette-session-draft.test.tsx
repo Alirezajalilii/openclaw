@@ -111,7 +111,7 @@ describe("PaletteSessionDraft", () => {
         failRead = () => this.dispatchEvent(new ProgressEvent("error"));
       });
       host.draft.setMessage("Keep this prompt after the attachment fails.");
-      host.draft.adoptImageFiles(
+      host.draft.adoptAttachmentFiles(
         [new File(["payload"], "unreadable.txt", { type: "text/plain" })],
         true,
       );

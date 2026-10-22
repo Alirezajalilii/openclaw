@@ -183,8 +183,8 @@ describe("cold command palette input custody", () => {
     },
   );
 
-  it.each(["transfer", "dismiss"] as const)(
-    "keeps pasted images only until %s",
+  it.each(["transfer", "dismiss", "context retirement"] as const)(
+    "handles pasted-file custody after %s",
     async (outcome) => {
       const { state, input } = await mountLoader();
       const file = new File(["image"], "clipboard.png", { type: "image/png" });
@@ -197,11 +197,17 @@ describe("cold command palette input custody", () => {
       const take = state.captureHandoff();
       keydown(input, { ctrlKey: true });
       expect(state.submitRequested()).toBe(true);
-      if (outcome === "dismiss") {
-        state.clear();
+      if (outcome !== "transfer") {
+        if (outcome === "dismiss") {
+          state.dismiss();
+        } else {
+          state.clear();
+        }
         state.begin();
         expect(take()).toBeUndefined();
-        expect(state.captureHandoff()()?.attachmentFiles).toBeUndefined();
+        const reopened = state.captureHandoff()();
+        expect(reopened?.attachmentFiles).toEqual(outcome === "dismiss" ? [file] : undefined);
+        expect(reopened?.submitRequested).toBeUndefined();
       } else {
         expect(take()).toMatchObject({ value: "", attachmentFiles: [file], submitRequested: true });
         expect(take()).toBeUndefined();

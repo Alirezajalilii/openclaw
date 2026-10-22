@@ -57,6 +57,10 @@ export class ShellCommandPaletteOwner {
   }
 
   readonly open = (): void => {
+    this.synchronizeScope();
+    if (!this.loading.active() && this.loading.hasAttachments()) {
+      this.loading.begin();
+    }
     const palette = this.#host.elements.commandPalette;
     // Opening is an intent, not a prompt transport. Never persist event detail.
     const descriptor = lazyShellEvent(COMMAND_PALETTE_OPEN_EVENT);
@@ -77,7 +81,6 @@ export class ShellCommandPaletteOwner {
       });
       return;
     }
-    this.synchronizeScope();
     this.loading.begin();
     this.#actions.request(this.#host.commandPaletteElement, descriptor, this.open);
   };
@@ -90,11 +93,8 @@ export class ShellCommandPaletteOwner {
   synchronizeScope(): void {
     const gateway = this.#host.context?.gateway;
     const scope = gateway ? gatewayPresentationScope(gateway) : undefined;
-    if (
-      this.#scope &&
-      this.#scope !== scope &&
-      (this.loading.active() || this.#actions.pending())
-    ) {
+    if (this.#scope && this.#scope !== scope) {
+      this.loading.clear();
       this.closePending();
     }
     this.#scope = scope;
@@ -106,6 +106,8 @@ export class ShellCommandPaletteOwner {
       this.#host.lazyCustomElements.visibleState?.element === this.#host.commandPaletteElement
     ) {
       this.closePending();
+    } else if (this.loading.hasAttachments()) {
+      this.open();
     } else if (this.#host.elements.commandPalette?.isConnected) {
       this.#host.elements.commandPalette.togglePalette();
     } else {
@@ -134,7 +136,7 @@ export class ShellCommandPaletteOwner {
       event.defaultPrevented ||
       event.isComposing ||
       event.keyCode === 229 ||
-      !this.loading.active() ||
+      (!this.loading.active() && !this.loading.hasAttachments()) ||
       !isCommandPaletteShortcut(event)
     ) {
       return false;
@@ -203,6 +205,14 @@ function createCommandPaletteLoading(host: Pick<CommandPaletteShellHost, "contex
           selectionDirection: input.selectionDirection,
         }
       : current.draft;
+  }
+  function nativeTextDrop(event: DragEvent): boolean {
+    return (
+      active() &&
+      event.target === input &&
+      !current.submitRequested &&
+      !Array.from(event.dataTransfer?.types ?? []).includes("Files")
+    );
   }
   function take(): CommandPaletteOpenInput | undefined {
     if (!active()) {
@@ -363,6 +373,9 @@ function createCommandPaletteLoading(host: Pick<CommandPaletteShellHost, "contex
       }
     },
     handleDragOver(event: DragEvent): void {
+      if (nativeTextDrop(event)) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       if (event.dataTransfer) {
@@ -376,6 +389,9 @@ function createCommandPaletteLoading(host: Pick<CommandPaletteShellHost, "contex
       }
     },
     handleDrop(event: DragEvent): void {
+      if (nativeTextDrop(event)) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       if (!active() || current.submitRequested || !event.dataTransfer?.files.length) {
@@ -417,6 +433,18 @@ function createCommandPaletteLoading(host: Pick<CommandPaletteShellHost, "contex
     captureHandoff(): CommandPaletteInputHandoff {
       const captured = generation;
       return () => (captured === generation ? take() : undefined);
+    },
+    dismiss(): void {
+      // Accepted files stay in this custody until the canonical draft takes them.
+      // Dismissal cancels Send and composition, while context retirement clears all.
+      const files = attachmentFiles;
+      const draft = files.length ? snapshot() : undefined;
+      reset();
+      if (files.length) {
+        attachmentFiles = files;
+        current = { ...current, draft };
+      }
+      write(current);
     },
     clear(): void {
       reset();

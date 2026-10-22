@@ -154,7 +154,9 @@ describe("command palette attachments", () => {
     expect(create).not.toHaveBeenCalled();
     expect(query(".chat-attachment-thumb--error")).toBeNull();
     expect(query(".chat-attachment-failures")).toBeNull();
-    expect(query(".chat-attachment-file__name")?.textContent).toBe("brief.pdf");
+    await waitForSolid(() =>
+      expect(query(".chat-attachment-file__name")?.textContent).toBe("brief.pdf"),
+    );
     expect(toast.showToast).toHaveBeenCalledExactlyOnceWith({
       message: "Could not attach file. Try again.",
       placement: "top-center",
