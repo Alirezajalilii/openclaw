@@ -7,6 +7,7 @@ import {
   createSignal,
   Errored,
   flush,
+  latest,
   onSettled,
 } from "solid-js";
 import type { UpdateRunRecord } from "../../../src/infra/update-run-record.ts";
@@ -164,26 +165,27 @@ export function SidebarUpdateCard(
     !nativeUpdateAvailable() &&
     !isUpdateRunAttentionVisible(props.updateRun ?? null, props.updateRunAcknowledged ?? false);
 
-  const checkStatus = action(async function* (check: () => Promise<boolean>) {
+  const checkStatus = action(async function* (pending: Promise<boolean>) {
     setCheckingTarget(true);
-    const refreshed = await check();
+    const refreshed = await pending;
     yield;
     return refreshed;
   });
 
   const checkTarget = async () => {
-    if (!props.onCheckStatus) {
+    const check = props.onCheckStatus;
+    if (!check) {
       return true;
     }
     if (targetCheckPending || props.connected === false || props.updateBusy) {
       return false;
     }
     targetCheckPending = true;
-    // The same receipt drives the write gate and its presentation; rejection denies admission.
-    const completion = checkStatus(props.onCheckStatus).catch(() => false);
+    // Observe the owner operation, not the action whose settlement these reads can hold.
+    const completion = (async () => check())().catch(() => false);
     setTargetCompletion({ result: completion });
     try {
-      const refreshed = await completion;
+      const refreshed = await checkStatus(completion);
       // The action has settled; commit the overlay's fresh props before live checks.
       flush();
       return refreshed;
@@ -286,7 +288,7 @@ export function SidebarUpdateCard(
         detail:
           props.statusBanner?.source === "read"
             ? props.statusBanner.text
-            : !targetReady()
+            : !latest(targetReady)
               ? t("updates.sidebar.checkFailed")
               : view.compactLabel,
         timestampMs:
@@ -608,7 +610,7 @@ export function SidebarUpdateCard(
               {t("updates.reviewUpdate")}
             </button>
           </Show>
-          <Show when={actionable() && !busy() && !checking() && targetReady()}>
+          <Show when={actionable() && !busy() && !checking() && latest(targetReady)}>
             <UpdateGitRevisions
               schedule={props.updateSchedule}
               updateAvailable={props.updateAvailable}

@@ -138,6 +138,32 @@ afterEach(async () => {
 });
 
 describe("SidebarUpdateCard", () => {
+  it("opens confirmation after a successful compact target check", async () => {
+    const restoreDialog = installDialogPolyfill();
+    const expansion = createDeferred<boolean>();
+    const opening = createDeferred<boolean>();
+    const element = await mount(gitUpdate, {
+      compact: true,
+      onCheckStatus: vi.fn().mockReturnValueOnce(expansion.promise).mockReturnValueOnce(opening.promise),
+    });
+    try {
+      await element.expand();
+      await element.update({ updateAvailable: freshGitUpdate });
+      expansion.resolve(true);
+      await vi.waitFor(() => expect(element.action()?.disabled).toBe(false));
+      const action = element.action()!;
+      action.click();
+      await vi.waitFor(() => expect(element.props().onCheckStatus).toHaveBeenCalledTimes(2));
+      expect(element.action()).toBe(action);
+      expect(action.disabled).toBe(true);
+      opening.resolve(true);
+      await vi.waitFor(() => expect(document.querySelector("openclaw-modal-dialog")).not.toBeNull());
+    } finally {
+      document.querySelector("openclaw-modal-dialog")?.dispatchEvent(new Event("modal-cancel"));
+      restoreDialog();
+    }
+  });
+
   it("reviews updates through the latest callback on the retained card", async () => {
     const initial = vi.fn();
     const current = vi.fn();
