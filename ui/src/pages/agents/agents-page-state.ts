@@ -1,6 +1,5 @@
 import { createSignal, onSettled } from "solid-js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import type { AgentsFilesListResult } from "../../api/types.ts";
 import { pathForAgentPanel } from "../../app-route-paths.ts";
 import { togglePinnedAgent } from "../../app/bootstrap-navigation-preferences.ts";
 import type { ApplicationContext } from "../../app/context.ts";
@@ -23,19 +22,18 @@ import { modelCatalogRefreshError, readAgentModelCatalog } from "../../lib/model
 import { createGitHubIdentityView } from "../../lib/reactive/domain-github-identity.ts";
 import { observeState } from "../../lib/reactive/observe-state.ts";
 import { projectOwner } from "../../lib/reactive/projection.ts";
+import { createTimeout } from "../../lib/reactive/timers.ts";
 import { parseAgentSessionKey } from "../../lib/sessions/session-key.ts";
 import { createAgentConfigActions } from "./agent-config-actions.ts";
 import { createAgentCronPresenter } from "./agent-cron-presenter.ts";
 import { createAgentsPageLifetime } from "./agents-page-lifetime.ts";
+import { createAgentsPagePresentation } from "./agents-page-presentation.ts";
 import type { GeneratedAvatar } from "./avatar-picker.tsx";
-import {
-  loadAgentFileContent,
-  createAgentFileActions,
-  resetAgentFiles,
-  type AgentFilesState,
-} from "./files.ts";
+import { createAgentFilePanel, type AgentFilesState, type AgentFilesViewState } from "./files.ts";
 import {
   type AgentIdentityDraft,
+  type AgentIdentityOutcome,
+  identityDraftStatus,
   resetIdentityDraft,
   saveIdentityDraft,
   selectIdentityAvatar,
@@ -59,13 +57,12 @@ import { createAgentToolsCatalog, createAgentEffectiveTools } from "./tools.ts";
 
 type AgentsPageData = Omit<AgentsState, "agentsLoading" | "agentsError"> &
   AgentFilesState &
+  AgentFilesViewState &
   AgentSkillsState & {
     chatModelCatalogRead: Promise<void> | null;
-    agentFilesList: AgentsFilesListResult | null;
-    agentFileActive: string | null;
     identityDraft: AgentIdentityDraft;
     identitySaving: boolean;
-    identityError: string | null;
+    identityOutcome: Promise<AgentIdentityOutcome> | null;
     cron: CronState;
     sessionKey: string;
     agentsPanel: AgentsPanel;
@@ -89,6 +86,8 @@ export function createAgentsPageState(
 ) {
   let routeData = initialRouteData;
   let active = true;
+  const presentation = createAgentsPageLifetime();
+  const identityPresentation = createAgentsPagePresentation(presentation.retired);
   const [skillsFilter, setSkillsFilter] = createSignal("");
   const identities = projectOwner(context.agentIdentity, (identity) => identity.entries());
   const channels = projectOwner(context.channels, (source) => source.state);
@@ -108,7 +107,7 @@ export function createAgentsPageState(
     agentFileSaving: false,
     identityDraft: { name: null, emoji: null, avatar: null },
     identitySaving: false,
-    identityError: null,
+    identityOutcome: null,
     agentSkillsRead: null,
     agentSkillsReport: null,
     agentSkillsAgentId: null,
@@ -154,9 +153,12 @@ export function createAgentsPageState(
   });
   const selectionDrafts = createAgentSelectionDrafts(state, resetSelectionState);
   let identitySaves = selectionDrafts.bindContext(context);
-  let identityAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
-  const presentation = createAgentsPageLifetime();
+  const identityAutosave = createTimeout(() => void saveSelectedIdentity(), 550);
   const skills = createAgentSkillsReader(state);
+  const files = createAgentFilePanel(state, {
+    canWrite: () => canCall("agents.files.set", "operator.admin"),
+    isCurrent: (client, generation, agentId) => isCurrentRequest(client, generation, agentId, {}),
+  });
   const skillReset = createAgentSkillsReset({
     retired: presentation.retired,
     state,
@@ -264,7 +266,7 @@ export function createAgentsPageState(
     const agentState = agents.state;
     state.agentsList = agentState.agentsList ? selectableAgentsList(agentState.agentsList) : null;
     syncSettingsSelection();
-    syncCurrentAgentFiles(agents);
+    files.sync(agents);
   }
 
   function syncSettingsSelection() {
@@ -279,33 +281,8 @@ export function createAgentsPageState(
     syncGitHubIdentity(state.agentsSelectedId);
   }
 
-  function syncCurrentAgentFiles(agents = context.agents) {
-    const agentId = state.agentsSelectedId;
-    if (!agentId || state.agentsPanel !== "files") {
-      return;
-    }
-    const status = agents.files(agentId);
-    if (!status.list) {
-      return;
-    }
-    state.agentFilesList = status.list;
-    void selectDefaultAgentFile(agentId);
-  }
-
-  async function selectDefaultAgentFile(agentId: string, force = false) {
-    const files = state.agentFilesList?.files ?? [];
-    if (!state.agentFileActive || !files.some((file) => file.name === state.agentFileActive)) {
-      state.agentFileActive = files.find((file) => file.name === "AGENTS.md")?.name ?? null;
-    }
-    if (state.agentFileActive && !context.agents.files(agentId).loading) {
-      await loadAgentFileContent(state, agentId, state.agentFileActive, {
-        force,
-      });
-    }
-  }
-
   function resetForSourceChange() {
-    clearIdentityAutosave();
+    identityAutosave.cancel();
     selectionDrafts.clear();
     identitySaves = selectionDrafts.bindContext(context);
     state.agentsList = null;
@@ -316,10 +293,7 @@ export function createAgentsPageState(
   function invalidateTransientRequests() {
     presentation.retire();
     gateway.invalidate();
-    state.agentFilesLoading = false;
-    state.agentFileRead = null;
-    state.agentFileOutcome = null;
-    state.agentFileSaving = false;
+    files.invalidate();
     state.identitySaving = false;
     skills.reset();
     toolsCatalog.invalidate();
@@ -440,7 +414,7 @@ export function createAgentsPageState(
       return;
     }
     if (state.agentsPanel === "files" && state.agentFilesList?.agentId !== agentId) {
-      void loadAgentFiles(agentId);
+      void files.load(agentId);
       return;
     }
     if (state.agentsPanel === "skills" && state.agentSkillsAgentId !== agentId) {
@@ -540,54 +514,12 @@ export function createAgentsPageState(
     }
   }
 
-  async function loadAgentFiles(agentId: string, force = false) {
-    const client = state.client;
-    const agents = context.agents;
-    const cached = agents.files(agentId);
-    if (!client || !state.connected || state.agentFilesLoading || cached.loading) {
-      return;
-    }
-    if (cached.list && !force) {
-      syncCurrentAgentFiles(agents);
-      return;
-    }
-    // Keep an initial failure visible until explicit retry or owner retirement.
-    if (cached.read && !force) {
-      return;
-    }
-    const generation = state.requestGeneration;
-    state.agentFileOutcome = null;
-    const list = force ? await agents.refreshFiles(agentId) : await agents.ensureFiles(agentId);
-    if (!isCurrentRequest(client, generation, agentId, { agents })) {
-      return;
-    }
-    state.agentFilesList = list ?? agents.files(agentId).list;
-    if (list) {
-      await selectDefaultAgentFile(agentId, force);
-    }
-  }
-
-  function clearIdentityAutosave() {
-    if (identityAutosaveTimer !== null) {
-      clearTimeout(identityAutosaveTimer);
-      identityAutosaveTimer = null;
-    }
-  }
-
   function scheduleIdentitySave(delay = 550) {
-    clearIdentityAutosave();
-    const { name, emoji, avatar } = state.identityDraft;
-    if (
-      (name !== null && !name.trim()) ||
-      (emoji !== null && !emoji.trim()) ||
-      (name === null && emoji === null && avatar === null)
-    ) {
+    identityAutosave.cancel();
+    if (identityDraftStatus(state.identityDraft) !== "ready") {
       return;
     }
-    identityAutosaveTimer = setTimeout(() => {
-      identityAutosaveTimer = null;
-      void saveSelectedIdentity();
-    }, delay);
+    identityAutosave.schedule(delay);
   }
 
   async function saveSelectedIdentity() {
@@ -629,6 +561,7 @@ export function createAgentsPageState(
       onSaved: () => syncAgentState(agents),
     });
     identitySaves.set(agentId, { client, snapshot: gateway.snapshot, promise: save });
+    identityPresentation.saveIdentity(save);
     try {
       await save;
     } finally {
@@ -646,10 +579,10 @@ export function createAgentsPageState(
 
   function resetSelectionState() {
     presentation.retire();
-    clearIdentityAutosave();
+    identityAutosave.cancel();
     gateway.invalidate();
     resetModelCatalog();
-    resetAgentFiles(state);
+    files.reset();
     state.agentSkillsReport = null;
     skills.reset();
     state.agentSkillsAgentId = null;
@@ -757,13 +690,7 @@ export function createAgentsPageState(
         onLoadMore: cron.onLoadMore,
         onRunNow: cron.onRunNow,
       },
-      agentFiles: {
-        listRead: context.agents.files(selectedAgentId).read,
-        onLoadFiles: (agentId: string) => void loadAgentFiles(agentId, true),
-        ...createAgentFileActions(state, selectedAgentId, () =>
-          canCall("agents.files.set", "operator.admin"),
-        ),
-      },
+      agentFiles: files.forAgent(selectedAgentId),
       agentIdentityById: Object.fromEntries(
         identities.read().map((entry) => [entry.agentId, entry]),
       ),
@@ -923,7 +850,7 @@ export function createAgentsPageState(
     applyRoute();
     return () => {
       selectionDrafts.retainCurrentIdentity();
-      clearIdentityAutosave();
+      identityAutosave.cancel();
       active = false;
       presentation.retire();
       cron.retire();
@@ -936,6 +863,7 @@ export function createAgentsPageState(
     };
   });
   return {
+    identitySavePending: () => identityPresentation.identitySaving() || readData().identitySaving,
     read() {
       observation.read();
       return viewProps();
