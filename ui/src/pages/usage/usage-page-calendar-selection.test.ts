@@ -8,6 +8,7 @@ import {
   cleanupUsagePageTest,
   focusDocument,
   loadUsagePage,
+  showRecentSessions,
   queryUsagePage,
   settleUsageTimers,
   textOf,
@@ -56,7 +57,9 @@ async function loadCalendar(
     }
     return pending && Array.isArray(params?.selectedDays) ? unresolved : result;
   });
-  return { ...(await loadUsagePage(request)), request };
+  const loaded = await loadUsagePage(request);
+  await showRecentSessions(loaded.page);
+  return { ...loaded, request };
 }
 const barsIn = (page: TestUsagePage) => [
   ...page.querySelectorAll<HTMLElement>(".daily-bar-wrapper"),
@@ -67,8 +70,8 @@ const shiftClick = (bar: HTMLElement) =>
 
 it.each<["fresh" | "partial", boolean, string[]]>([
   ["fresh", false, ["May 1", "May 2", "May 3", "May 4"]],
-  ["partial", false, ["May 2", "May 4"]],
-  ["partial", true, ["May 2", "May 4"]],
+  ["partial", false, ["May 1", "May 2", "May 3", "May 4"]],
+  ["partial", true, ["May 1", "May 2", "May 3", "May 4"]],
 ])(
   "selects the displayed calendar range with Shift-click for %s (filtered: %s)",
   async (cache, filtered, selectedLabels) => {
@@ -91,11 +94,16 @@ it.each<["fresh" | "partial", boolean, string[]]>([
 
     const bars = () => barsIn(page);
     expect(bars().map(labelOf)).toEqual(selectedLabels);
-    const amounts = cache === "fresh" ? [0, 100, 0, 900] : [100, 900];
+    const amounts = [0, 100, 0, 900];
     expect(bars().map((bar) => bar.getAttribute("aria-label"))).toEqual(
-      selectedLabels.map((label, index) => `${label}, 2026: ${amounts[index]} tokens, $0.00`),
+      selectedLabels.map((label, index) =>
+        cache === "partial" && amounts[index] === 0
+          ? `${label}, 2026: not loaded yet`
+          : `${label}, 2026: ${amounts[index]} tokens, $0.00`,
+      ),
     );
-    expect(page.querySelectorAll(".daily-bar--empty")).toHaveLength(cache === "fresh" ? 2 : 0);
+    expect(page.querySelectorAll(".daily-bar--empty")).toHaveLength(2);
+    expect(page.querySelectorAll(".daily-bar-wrapper--pending")).toHaveLength(cache === "fresh" ? 0 : 2);
     expect(textOf(page, ".daily-chart-range")).toContain("May 1, 2026");
     bars()[0]!.click();
     await settleUsageTimers(page);

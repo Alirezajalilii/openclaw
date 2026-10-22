@@ -13,5 +13,6 @@ export type UsageProps = Omit<UsageView, "data" | "result"> & {
       "offset" | "limit" | "total" | "unfilteredSessionCount" | "tableTotals" | "tableSessionCount"
     >;
     selectedSession?: UsageSessionEntry | null;
+    partialNotice?: string | null;
   };
 };

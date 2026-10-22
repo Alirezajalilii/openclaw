@@ -59,7 +59,7 @@ export function createUsagePage(context: ApplicationContext) {
   };
   // Sorting and recent selection belong to the next request, before Solid commits.
   let display: Omit<UsageDisplayState, keyof UsagePresentation["display"]> = {
-    sessionSort: "recent",
+    sessionSort: "cost",
     sessionSortDir: "desc",
     recentSessions: [],
     sessionsTab: "all",
@@ -67,7 +67,7 @@ export function createUsagePage(context: ApplicationContext) {
   const [presentation, setPresentation] = createStore<UsagePresentation>({
     display: {
       chartMode: "tokens",
-      dailyChartMode: "by-type",
+      dailyChartMode: "by-provider",
       contextExpanded: false,
       headerPinned: false,
     },
@@ -523,7 +523,7 @@ export function createUsagePage(context: ApplicationContext) {
       data: {
         loading: usageLoading(),
         exporting: usageExportRequest.pending,
-        error: usageError ?? usageResult()?.partial?.message ?? null,
+        error: usageError,
         sessions: usageRosterResult()?.sessions ?? [],
         sessionPage: usageRosterResult()?.overview,
         creatorOptions: usageCreatorOptions(),

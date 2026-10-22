@@ -71,7 +71,7 @@ function SummaryStat(props: {
           { "usage-summary-value--compact": props.compactValue },
         ]}
       >
-        {props.value}
+        {typeof props.value === "number" ? props.value.toLocaleString() : props.value}
       </div>
       <div class="usage-summary-sub">{props.sub}</div>
     </div>

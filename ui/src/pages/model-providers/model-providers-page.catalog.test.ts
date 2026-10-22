@@ -643,7 +643,7 @@ describe("Models page catalog publication", () => {
       if (replacement === "page refresh") {
         expect(modelPicker(page, "primary")).toBe(retainedPicker);
       } else {
-        expect(page.view.props.usageAgentId).toBe("writer");
+        expect(page.view.props.accountUsage?.agentId).toBe("writer");
       }
       await openModelPicker(page);
       expect(

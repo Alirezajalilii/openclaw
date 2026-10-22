@@ -9,20 +9,9 @@ function mountHeatmap(daily: CostDailyEntry[], start: string, end: string) {
 }
 
 describe("renderUsageHeatmap", () => {
-  it("keeps short ranges at their natural cell width", () => {
+  it("leaves short ranges to the daily chart", () => {
     const container = mountHeatmap([dailyEntry("2026-08-01", 20)], "2026-08-01", "2026-08-01");
-
-    expect(
-      container
-        .querySelector<SVGElement>(".usage-heatmap__svg")
-        ?.style.getPropertyValue("--usage-heatmap-width"),
-    ).toBe("44px");
-    const month = new Intl.DateTimeFormat(undefined, { month: "short", timeZone: "UTC" });
-    expect(container.querySelector(".usage-heatmap__month")?.textContent).toBe(
-      month.format(new Date("2026-08-01T12:00:00Z")),
-    );
-    const cell = container.querySelector(".usage-heatmap__cell")!;
-    expect([cell.getAttribute("x"), cell.getAttribute("y")]).toEqual(["30", "102"]);
+    expect(container.querySelector(".usage-heatmap__svg")).toBeNull();
   });
 
   it.each(["2025-07-11", "1970-01-01"])(

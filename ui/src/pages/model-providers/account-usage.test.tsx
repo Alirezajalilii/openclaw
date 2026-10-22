@@ -45,7 +45,7 @@ it("loads automatically, renders remaining quota and balance, and re-reads on a 
   expect(request).toHaveBeenCalledExactlyOnceWith(
     "codex.accountUsage",
     { agentId: "main", profileId: "openai:account" },
-    { timeoutMs: 30_000 },
+    { signal: expect.any(AbortSignal), timeoutMs: 30_000 },
   );
   // A rebuilt scope with the same fields is the same account read.
   view.setScope({ ...view.scope() });
@@ -72,6 +72,7 @@ it("drops a pending response when the selected agent changes and shows the curre
   await waitForSolid(() =>
     expect(view.container.textContent).toContain("Account usage unavailable"),
   );
+  expect(request.mock.calls[0]?.[2]?.signal?.aborted).toBe(true);
   stale.resolve();
   await stale.promise;
   flush();

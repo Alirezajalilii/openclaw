@@ -178,14 +178,14 @@ export function createModelProviderProfileActions(options: ProfileActionsOptions
     clearProbe(cardId);
     options.setBusy(key, true);
     options.clearMessage(cardId);
-    const completion = settleLogout(key, target, scope);
+    const completion = settleLogout(key, targets, scope);
     options.onLogoutStarted({ cardId, completion });
     return completion;
   }
 
   async function settleLogout(
     key: string,
-    target: ModelProviderLogoutTarget,
+    targets: Array<ModelProviderLogoutTarget | ModelProviderRemovalTarget>,
     { agentId, isCurrent }: ReturnType<typeof captureScope>,
   ): Promise<void> {
     try {

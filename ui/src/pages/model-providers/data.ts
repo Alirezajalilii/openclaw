@@ -6,7 +6,6 @@ import type {
   ProviderUsageSnapshot,
   UsageSummary,
 } from "../../../../src/infra/provider-usage.types.js";
-import type { SessionModelUsage } from "../../../../src/infra/session-cost-usage.types.js";
 import type {
   AgentsListResult,
   FastMode,
@@ -39,23 +38,19 @@ type ModelProviderAuthSummary = {
   expiryLabel?: string;
 };
 
-type ModelProviderLocalCost = {
-  usageReport?: SessionModelUsage["totals"]["usageReport"];
-  totalCost: number;
-  totalTokens: number;
-  messageCount: number;
-};
-
 export type ModelProviderLogoutTarget = {
   provider: string;
   profileIds: string[];
 };
 
-export type ModelProviderPendingLogout = {
-  cardId: string;
-  label: string;
-  target: ModelProviderLogoutTarget;
-};
+/** A provider-wide sign-out, or the config API key alone when `credentialType` is set. */
+export type ModelProviderRemovalTarget = { provider: string; credentialType?: "api_key" };
+
+/** One account's sign-out, or every credential OpenClaw holds for a provider. */
+export type ModelProviderPendingLogout = { cardId: string; label: string } & (
+  | { target: ModelProviderLogoutTarget }
+  | { removeTargets: ModelProviderRemovalTarget[]; keptSource?: string }
+);
 
 type ModelProviderProfileOrderLock = NonNullable<ModelAuthStatusProvider["profileOrderLocked"]>;
 
@@ -91,8 +86,6 @@ export type ModelProviderCard = {
   checkingModels?: boolean;
   /** Live provider-reported usage (quota windows, billing, cost history). */
   usage?: ProviderUsageSnapshot;
-  /** Locally-computed session spend for the requested window. */
-  localCost?: ModelProviderLocalCost;
 };
 
 type ConfiguredModelProvider = { key: string; hasApiKey: boolean; authMode?: string };
@@ -104,7 +97,6 @@ type ModelProviderCardsInput = {
   pendingProviders?: readonly string[];
   configProviders?: ConfiguredModelProvider[];
   providerUsage: UsageSummary | null;
-  costByProvider: SessionModelUsage[] | null;
 };
 
 type CardDraft = {
@@ -193,35 +185,11 @@ export function collectProviderUsage(
   return result;
 }
 
-export function collectProviderLocalCost(
-  entries: SessionModelUsage[] | null,
-): Map<string, ModelProviderLocalCost> {
-  const result = new Map<string, ModelProviderLocalCost>();
-  for (const entry of entries ?? []) {
-    const id = canonicalModelAuthProviderId(entry.provider ?? "");
-    if (!id) {
-      continue;
-    }
-    let cost = result.get(id);
-    if (!cost) {
-      cost = { totalCost: 0, totalTokens: 0, messageCount: 0 };
-      result.set(id, cost);
-    }
-    cost.totalCost += entry.totals.totalCost;
-    cost.totalTokens += entry.totals.totalTokens;
-    cost.messageCount += entry.count;
-    if (entry.totals.usageReport?.state === "unavailable") {
-      cost.usageReport = entry.totals.usageReport;
-    }
-  }
-  return result;
-}
 
 /**
  * Builds the provider card list. A provider qualifies as "configured" when it
  * has model-provider auth, catalog models (the default models.list view only contains
- * configured or auth-backed entries), a live usage snapshot, or recorded
- * local spend. Model presence alone is enough: a configured API-key provider
+ * configured or auth-backed entries), a live usage snapshot. Model presence alone is enough: a configured API-key provider
  * with a broken credential reports available=false and no auth row, and the
  * page must surface that state rather than hide the provider.
  */
@@ -392,10 +360,6 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
     ensureDraft(drafts, id, displayName || providerDisplayLabel(id)).card.usage = snapshot;
   }
 
-  for (const [id, localCost] of collectProviderLocalCost(input.costByProvider)) {
-    ensureDraft(drafts, id, providerDisplayLabel(id)).card.localCost = localCost;
-  }
-
   return drafts
     .filter(
       (draft) =>
@@ -406,9 +370,7 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
         Boolean(draft.card.usage) ||
         draft.card.modelCount > 0 ||
         Boolean(draft.catalogOutcome) ||
-        draft.card.checkingModels ||
-        (draft.card.localCost?.totalTokens ?? 0) > 0 ||
-        draft.card.localCost?.usageReport?.state === "unavailable",
+        draft.card.checkingModels,
     )
     .map((draft) => {
       const apiKeySupported = apiKeyCapabilities.get(draft.card.id);
