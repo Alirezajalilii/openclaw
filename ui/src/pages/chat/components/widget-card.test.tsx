@@ -580,7 +580,7 @@ describe("widget-card", () => {
   });
 
   it("announces a connected pin failure once across title updates", async () => {
-    const showToast = vi.spyOn(toast, "showToast").mockImplementation(() => {});
+    const showToast = vi.spyOn(toast, "showToast").mockImplementation(() => true);
     onTestFinished(() => showToast.mockRestore());
     const completion = Promise.withResolvers<void>();
     const { provider } = boardProvider({ pinWidget: () => completion.promise });
