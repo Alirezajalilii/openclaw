@@ -79,7 +79,7 @@ function BrowserDashboardWidgetContent(
           }
           pending = true;
           failed = false;
-          const result = (async () => {
+          const task = (async () => {
             try {
               if (!instanceId) {
                 throw new Error(t("browser.dashboardMissingIdentity"));
@@ -114,10 +114,10 @@ function BrowserDashboardWidgetContent(
               }
             }
           })();
-          setCompletion(result);
+          void setCompletion(task);
           state.publish();
           // Consume the task even if its error slot has been disposed.
-          await result.catch(() => undefined);
+          await task.catch(() => undefined);
         }
         function activate() {
           if (props.active && available() && !pending && !failed) {
