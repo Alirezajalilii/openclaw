@@ -42,7 +42,12 @@ export function resolveCronRestartRetryAtMs(
   ) {
     return undefined;
   }
-  return Math.max(nowMs, startedAtMs) + MIN_REFIRE_GAP_MS;
+  // Publish the same retry floor that recurring-run admission will enforce.
+  const delay =
+    job.schedule.kind === "at"
+      ? MIN_REFIRE_GAP_MS
+      : errorBackoffMs(job.state.consecutiveErrors ?? 1);
+  return Math.max(nowMs, startedAtMs) + delay;
 }
 
 const STAGGER_OFFSET_CACHE_MAX = 4096;

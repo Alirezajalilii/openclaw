@@ -16,6 +16,7 @@ import { needsCronTimerMaintenance } from "./jobs-scheduling.js";
 import type { CronServiceDeps, DeferredCronNotifications } from "./state.js";
 import { runPostPersistCronNotifications } from "./store.js";
 import { applyJobResult } from "./timer-outcomes.js";
+import { isRunnableJob } from "./timer-runnable.js";
 import { onTimer, runMissedJobs } from "./timer.test-support.js";
 
 const timerRegressionFixtures = setupCronRegressionFixtures({ prefix: "cron-outcomes-" });
@@ -73,35 +74,47 @@ it.each([false, true])("never invents an event retry slot during outcome replay=
   expect(job.state.sourceIdentity).toBe("source-generation");
 });
 
-it.each([0, 9, 10])("preserves %i failures after recurring-run cancellation", (priorErrors) => {
-  const { job, apply, deferredNotifications } = outcomeFixture(startedAt, {
-    state: { consecutiveErrors: priorErrors },
-    failureAlert: { after: 1, cooldownMs: 0 },
-  });
-  apply({
-    status: "error",
-    error: "Gateway restarting.",
-    errorClassification: { kind: "aborted" },
-    endedAt: startedAt + 1,
-  });
+it.each([
+  { priorErrors: 0, restart: false },
+  { priorErrors: 9, restart: false },
+  { priorErrors: 10, restart: false },
+  { priorErrors: 0, restart: true },
+  { priorErrors: 9, restart: true },
+])(
+  "preserves $priorErrors failures after interruption (restart: $restart)",
+  ({ priorErrors, restart }) => {
+    const { job, apply, deferredNotifications } = outcomeFixture(startedAt, {
+      state: { consecutiveErrors: priorErrors },
+      failureAlert: { after: 1, cooldownMs: 0 },
+    });
+    apply({
+      status: "error",
+      error: "Gateway restarting.",
+      errorClassification: { kind: "aborted" },
+      interruptedByRestart: restart,
+      endedAt: startedAt + 1,
+    });
 
-  expect(job).toMatchObject({
-    enabled: true,
-    state: {
-      lastError: "Gateway restarting.",
-      lastRunStatus: "error",
-      consecutiveErrors: priorErrors,
-    },
-  });
-  expect(job.state.autoDisabled).toBeUndefined();
-  expect(job.state.failureAlertIncident).toBeUndefined();
-  // Interrupted runs retain error scheduling, including its minimum backoff.
-  const nextRunAtMs = startedAt + (priorErrors === 0 ? 60_000 : 3_600_001);
-  expect(job.state.nextRunAtMs).toBe(nextRunAtMs);
-  expect(needsCronTimerMaintenance(job, startedAt + 60_000)).toBe(false);
-  expect(needsCronTimerMaintenance(job, nextRunAtMs)).toBe(false);
-  expect(deferredNotifications).toEqual([]);
-});
+    expect(job).toMatchObject({
+      enabled: true,
+      state: {
+        lastError: restart ? "cron: job interrupted by gateway restart" : "Gateway restarting.",
+        lastRunStatus: "error",
+        consecutiveErrors: priorErrors,
+      },
+    });
+    expect(job.state.autoDisabled).toBeUndefined();
+    expect(job.state.failureAlertIncident).toBeUndefined();
+    // Interrupted runs retain error scheduling, including its minimum backoff.
+    const nextRunAtMs = startedAt + (priorErrors === 0 ? (restart ? 30_001 : 60_000) : 3_600_001);
+    expect(job.state.nextRunAtMs).toBe(nextRunAtMs);
+    expect(needsCronTimerMaintenance(job, startedAt + 60_000)).toBe(false);
+    expect(needsCronTimerMaintenance(job, nextRunAtMs)).toBe(false);
+    expect(isRunnableJob({ job, nowMs: nextRunAtMs - 1 })).toBe(false);
+    expect(isRunnableJob({ job, nowMs: nextRunAtMs })).toBe(true);
+    expect(deferredNotifications).toEqual([]);
+  },
+);
 
 it("preserves every cadence after a transient recurring retry succeeds", () => {
   const scheduledAt = Date.parse("2026-05-29T02:28:00.000Z");
