@@ -152,7 +152,7 @@ function recoveryShell(
     retireBeforeRevision: Date.now(),
   }));
   sessionState.result = sessionsResult(
-    (params.sessionKeys ?? [deletedKey]).map((key) => ({ key })),
+    (params.sessionKeys ?? [deletedKey]).map((key) => ({ key, kind: "direct" })),
   );
   const sessionListeners = new Set<(state: typeof sessionState) => void>();
   gateway.setSessionKey = setSessionKey;
