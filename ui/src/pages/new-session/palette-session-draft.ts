@@ -47,7 +47,7 @@ export class PaletteSessionDraft {
   private readonly changed = () => {
     const draft = this.draft?.submission.attachmentDraft;
     const previous = this.attachmentIntent;
-    // Reading and failed slots establish intent before they have a ready payload.
+    // Pending reads establish intent before they have a ready payload.
     this.attachmentIntent = Boolean(
       draft?.reads.project(draft.attachments).length ||
       (this.attachmentIntent && this.message.trim()),
@@ -62,12 +62,6 @@ export class PaletteSessionDraft {
     return this.attachmentIntent;
   }
 
-  private get failedAttachments(): boolean {
-    const draft = this.draft?.submission.attachmentDraft;
-    return (
-      draft?.reads.project(draft.attachments).some((entry) => entry.state === "error") ?? false
-    );
-  }
   private data: NewSessionRouteData | undefined;
   private presentationScope: ReturnType<typeof gatewayPresentationScope> | undefined;
   private agentPickerOpen = false;
@@ -142,12 +136,7 @@ export class PaletteSessionDraft {
     );
   }
   get canSubmit(): boolean {
-    return (
-      !this.coldSubmit &&
-      !this.failedAttachments &&
-      this.hasPrompt &&
-      Boolean(this.draft?.submission.canSubmit())
-    );
+    return !this.coldSubmit && this.hasPrompt && Boolean(this.draft?.submission.canSubmit());
   }
   get error(): string | null {
     const submission = this.draft?.submission;
@@ -159,9 +148,7 @@ export class PaletteSessionDraft {
     );
   }
   get disabledReason(): string | undefined {
-    return this.failedAttachments
-      ? t("palette.removeFailedAttachments")
-      : this.draft?.submission.submitDisabledReason();
+    return this.draft?.submission.submitDisabledReason();
   }
 
   setMessage(value: string, mentions?: readonly HumanMention[]) {
@@ -342,13 +329,7 @@ export class PaletteSessionDraft {
 
   private async submitOwnedDraft(): Promise<void> {
     this.synchronizePresentationScope();
-    if (
-      !this.read().open ||
-      this.coldSubmit ||
-      this.failedAttachments ||
-      !this.hasPrompt ||
-      !this.draft
-    ) {
+    if (!this.read().open || this.coldSubmit || !this.hasPrompt || !this.draft) {
       return;
     }
     await this.draft.submission.submit(undefined, true);

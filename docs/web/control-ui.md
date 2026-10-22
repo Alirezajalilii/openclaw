@@ -31,8 +31,10 @@ new background session without changing your current conversation or composer.
 The first attachment switches the palette from navigation to **New session**.
 Add optional instructions, adjust the session settings, then choose **New session**
 or press **Cmd/Ctrl+Enter**. Dropping a file does not start the session by itself.
-Preparation and failed files remain visible; remove or reattach failed files
-before starting. File admission and size limits match the chat composer.
+Files remain visible while preparing. If a file is rejected, an error toast
+explains the failure and only that file is removed. You can manually start a
+session with the remaining text and files; a rejected file cancels a pending
+automatic start. File admission and size limits match the chat composer.
 
 Closing the palette keeps its attachment draft in memory for the same Gateway
 and account. Removing the final attachment keeps new-session mode while
