@@ -151,3 +151,57 @@ it.each(["session", "goal", "presentation"] as const)(
     }
   },
 );
+
+it("keeps callback failures outside objective validation and retains the form through retry", async () => {
+  const restore = installDialogPolyfill();
+  const pending = createDeferred<boolean>();
+  const onSubmit = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Goal update unavailable. Try again."))
+    .mockReturnValueOnce(pending.promise);
+  const view = mountSolid(() => (
+    <ChatDetailsGoal
+      goal={goal}
+      sessionId="session-original"
+      presented
+      connected
+      canAct
+      onGoalAction={vi.fn()}
+      onGoalSubmit={onSubmit}
+    />
+  ));
+  try {
+    view.getByRole("button", { name: "Edit goal" }).click();
+    const { modal } = await waitForRenderedModalDialog(document.body);
+    const input = modal.querySelector("textarea")!;
+    const save = modal.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    const objective = `${goal.objective}\nKeep the documentation accurate`;
+    input.value = objective;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flush();
+    save.click();
+    await waitForSolid(() =>
+      expect(modal.querySelector('[role="alert"]')?.textContent).toContain(
+        "Goal update unavailable. Try again.",
+      ),
+    );
+    expect(input.getAttribute("aria-invalid")).not.toBe("true");
+    expect(input.value).toBe(objective);
+    expect(document.activeElement).toBe(input);
+    save.click();
+    flush();
+    await waitForSolid(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(modal.querySelector('[role="alert"]')).toBeNull();
+    expect(modal.querySelector("textarea")).toBe(input);
+    expect(input.disabled).toBe(true);
+    modal
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+    pending.resolve(true);
+    await waitForSolid(() => expect(document.body.contains(modal)).toBe(false));
+  } finally {
+    view.unmount();
+    restore();
+  }
+});
