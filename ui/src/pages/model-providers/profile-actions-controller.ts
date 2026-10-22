@@ -37,6 +37,7 @@ type ProfileActionsOptions = {
   setData: (data: ModelProvidersData) => void;
   setOrders: (orders: Record<string, string[]>) => void;
   canMutate: () => boolean;
+  hasMutationAccess: () => boolean;
   isBusy: (key: string) => boolean;
   setBusy: (key: string, value: boolean) => void;
   setProbeResult: (cardId: string, result: ModelsProbeResult | null) => void;
@@ -147,11 +148,16 @@ export function createModelProviderProfileActions(options: ProfileActionsOptions
         : t("modelProviders.logout.actionFor", { account: pending.label }),
       message: removing
         ? [
-            t("modelProviders.remove.confirm", { provider: pending.label }),
+            pending.removeTargets.some((target) => !target.credentialType)
+              ? t("modelProviders.remove.accounts", { provider: pending.label })
+              : "",
+            pending.configKey ? t("modelProviders.remove.keys", { key: pending.configKey }) : "",
             pending.keptSource
               ? t("modelProviders.remove.kept", { source: pending.keptSource })
               : "",
-          ].join(" ")
+          ]
+            .filter(Boolean)
+            .join(" ")
         : t("modelProviders.logout.confirm", { provider: pending.label }),
       confirmLabel: t(removing ? "modelProviders.remove.action" : "modelProviders.logout.action"),
       danger: true,
@@ -188,12 +194,15 @@ export function createModelProviderProfileActions(options: ProfileActionsOptions
     targets: Array<ModelProviderLogoutTarget | ModelProviderRemovalTarget>,
     { agentId, isCurrent }: ReturnType<typeof captureScope>,
   ): Promise<void> {
+    const receipts: ModelAuthLogoutResult[] = [];
     try {
       const result = await options.getConfig().runExternalMutation(
         async (activeClient) => {
-          const receipts: ModelAuthLogoutResult[] = [];
           try {
             for (const target of targets) {
+              if (!isCurrent() || !options.hasMutationAccess()) {
+                throw new Error(t("modelProviders.remove.accessChanged"));
+              }
               receipts.push(
                 await activeClient.request<ModelAuthLogoutResult>("models.authLogout", {
                   ...target,
@@ -213,9 +222,27 @@ export function createModelProviderProfileActions(options: ProfileActionsOptions
         return;
       }
       if (!result.ok) {
-        await options.refresh();
+        let refreshError: string | undefined;
+        try {
+          await options.refresh();
+          refreshError = options.getData()?.error ?? undefined;
+        } catch (error) {
+          refreshError = modelProviderErrorMessage(error);
+        }
         if (isCurrent()) {
-          showProfileActionError(result.error);
+          const completed = new Set(receipts.flatMap((receipt) => receipt.removedProfiles ?? []));
+          showProfileActionError(
+            [
+              receipts.length
+                ? t("modelProviders.remove.partial", { count: String(completed.size) })
+                : "",
+              ...receipts.flatMap((receipt) => receipt.warning ?? []),
+              result.error,
+              refreshError,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          );
         }
         return;
       }

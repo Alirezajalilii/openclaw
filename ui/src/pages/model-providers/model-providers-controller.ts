@@ -28,10 +28,7 @@ import {
   type ModelProviderRowMessage,
 } from "./config-mutation.ts";
 import { ModelProviderCoreLoader, type ModelProviderRefreshReason } from "./core-load.ts";
-import {
-  buildModelProviderPresentation,
-  type DefaultsDraft,
-} from "./data.ts";
+import { buildModelProviderPresentation, type DefaultsDraft } from "./data.ts";
 import { createModelProviderDiscovery } from "./discovery-controller.tsx";
 import { createInstalledAgents } from "./installed-agents.tsx";
 import { EMPTY_MODEL_PROVIDERS_DATA } from "./load.ts";
@@ -209,6 +206,7 @@ export function createModelProviders(
     setOrders: (orders) => (state.profileOrders = orders),
     clearMessage: (cardId) => setMessage(cardId, null),
     canMutate: () => canMutate(),
+    hasMutationAccess: () => mutationBlockedReason() === null,
     cancelRefresh: () => core.invalidate(),
     refresh: () => refresh("forced"),
     isCurrentClient: (client, epoch) => gateway.isCurrent({ client, epoch }),
@@ -598,7 +596,7 @@ export function createModelProviders(
       coreReceipt: core.receipt,
       scopeError: rosterError ?? (noSelectableAgents ? t("agents.noAgents") : null),
       error: rosterError ?? (noSelectableAgents ? t("agents.noAgents") : data.error),
-      providerUsageFailed: data.providerUsage?.ok === false,
+      providerUsageFailed: data.providerUsageFailed,
       supplementalLoading: loaderPending || supplemental.loading,
       updatedAt: data.updatedAt,
       onOpenUsage: () => context.navigate("usage"),

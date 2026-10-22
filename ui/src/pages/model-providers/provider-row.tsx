@@ -1,5 +1,4 @@
-// One provider in Provider access: identity, plan, status and local usage in a
-// compact header, then accounts beside plan limits, then the provider's actions.
+// Provider access keeps account credentials and plan limits together in each row.
 import { createSignal, For, Show } from "solid-js";
 import type { ModelsProbeResult } from "../../api/types.ts";
 import { providerDisplayLabel } from "../../components/provider-icon.ts";
@@ -176,6 +175,7 @@ function KeyEditor(props: ModelProvidersViewProps & { card: ModelProviderCard })
 function removalPlan(card: ModelProviderCard): {
   removeTargets: ModelProviderRemovalTarget[];
   keptSource?: string;
+  configKey?: string;
 } {
   const providers = new Set(card.logoutTargets.map((target) => target.provider));
   for (const profile of card.profiles) {
@@ -183,19 +183,27 @@ function removalPlan(card: ModelProviderCard): {
       providers.add(card.profileProviderIds[profile.profileId] ?? card.id);
     }
   }
-  const external =
-    card.apiKey?.source === "env"
-      ? apiKeySource(card)
-      : card.profiles.some((profile) => profile.externallyManaged || !profile.logoutSupported)
-        ? t("modelProviders.row.managedOutside")
-        : undefined;
+  const references = card.configApiKeys.filter((key) => key.reference);
+  const external = [
+    card.apiKey?.source === "env" ? apiKeySource(card) : undefined,
+    references.length
+      ? t("modelProviders.remove.secretReferences", {
+          keys: references.map(({ key }) => key).join(", "),
+        })
+      : undefined,
+    card.profiles.some((profile) => profile.externallyManaged || profile.source === "external")
+      ? t("modelProviders.row.managedOutside")
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join("; ");
+  const configKey = card.configApiKeys.find((key) => !key.reference)?.key;
   return {
+    ...(configKey ? { configKey } : {}),
     removeTargets: [
       ...[...providers].map((provider) => ({ provider })),
-      // A provider-wide sign-out keeps config keys; only the API-key form deletes them.
-      ...(card.hasConfigApiKey
-        ? [{ provider: card.configKey ?? card.id, credentialType: "api_key" as const }]
-        : []),
+      // This form also clears saved API-key profiles and literal keys on config aliases.
+      ...(configKey ? [{ provider: configKey, credentialType: "api_key" as const }] : []),
     ],
     ...(external ? { keptSource: external } : {}),
   };
@@ -406,7 +414,7 @@ export function UnconnectedProviderRow(props: ProviderRowProps) {
         <span class="provider-row__identity">
           <span class="provider-row__name">{providerName(card())}</span>
           <span class="provider-row__meta settings-row__desc">
-            {card().id} · {reason()}
+            {card().id} · {renderProviderStatus(card()) ?? reason()}
           </span>
         </span>
         <ProviderActions {...props} />

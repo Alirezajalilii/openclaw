@@ -34,11 +34,18 @@ export class ModelProviderSupplementalLoader {
     this.options.setData({
       ...data,
       providerUsage: previous?.providerUsage ?? data.providerUsage,
+      providerUsageFailed: previous?.providerUsageFailed ?? data.providerUsageFailed,
     });
     this.options.setDataClient(client);
-    if (data.providerUsage !== null) {
+    if (data.providerUsageFailed) {
       this.options.refreshPolicy.markProviderUsage(
-        data.providerUsage,
+        { ok: false },
+        data.updatedAt,
+        this.options.getGateway().epoch,
+      );
+    } else if (data.providerUsage !== null) {
+      this.options.refreshPolicy.markProviderUsage(
+        { ok: true, value: data.providerUsage },
         data.updatedAt,
         this.options.getGateway().epoch,
       );
@@ -50,7 +57,8 @@ export class ModelProviderSupplementalLoader {
       !this.options.isCoreLoading() &&
       !this.loading &&
       (previous?.providerUsage == null || this.forceReload) &&
-      data.providerUsage === null
+      data.providerUsage === null &&
+      !data.providerUsageFailed
     ) {
       this.forceReload = false;
       void this.loadUsage(client);
@@ -60,7 +68,7 @@ export class ModelProviderSupplementalLoader {
   resume(): void {
     const data = this.options.getData();
     const client = this.options.getDataClient();
-    if (data?.providerUsage === null && client) {
+    if (data?.providerUsage === null && !data.providerUsageFailed && client) {
       this.adoptCoreData(client, data);
     }
   }
@@ -109,7 +117,11 @@ export class ModelProviderSupplementalLoader {
         client === this.options.getDataClient() &&
         this.options.getGateway().isCurrent({ client, epoch })
       ) {
-        this.options.setData({ ...current, providerUsage });
+        this.options.setData({
+          ...current,
+          providerUsage: providerUsage.ok ? providerUsage.value : current.providerUsage,
+          providerUsageFailed: !providerUsage.ok,
+        });
         this.options.refreshPolicy.markProviderUsage(providerUsage, Date.now(), epoch);
       }
     } catch {

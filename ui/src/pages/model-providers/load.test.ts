@@ -149,6 +149,7 @@ it("retries a missing auth-status response without discarding other provider dat
     providerOutcomes: [],
     catalogError: null,
     providerUsage: null,
+    providerUsageFailed: false,
     error: null,
   });
   expect(h.cached()?.models).toEqual([]);

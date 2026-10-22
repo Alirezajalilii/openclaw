@@ -169,6 +169,9 @@ export function DailyChartCompact(props: {
     dates().map((_, index) => series().reduce((sum, entry) => sum + (entry.values[index] ?? 0), 0)),
   );
   const scale = createMemo(() => niceCeiling(Math.max(...totals(), 0)));
+  const sharesKnown = createMemo(
+    () => props.range.complete && days().every((day) => day.usageReport?.state !== "unavailable"),
+  );
   const shares = createMemo(() => {
     const sum = totals().reduce((total, value) => total + value, 0);
     return series().map((entry) => ({
@@ -302,7 +305,9 @@ export function DailyChartCompact(props: {
                 <div class="daily-chart-tip" role="status" style={tipPosition(active().index)}>
                   <strong>
                     {formatFullDate(dates()[active().index] ?? "")} ·{" "}
-                    {measure(totals()[active().index] ?? 0, active().index)}
+                    {calendar().pending.has(dates()[active().index] ?? "")
+                      ? t("usage.daily.pending")
+                      : measure(totals()[active().index] ?? 0, active().index)}
                   </strong>
                   <Show when={series().length > 1}>
                     <For each={series().filter((entry) => (entry.values[active().index] ?? 0) > 0)}>
@@ -327,7 +332,9 @@ export function DailyChartCompact(props: {
                 <li>
                   <span class="daily-chart-legend__key" style={{ background: entry.color }} />
                   {entry.label}
-                  <b>{`${(entry.share * 100).toFixed(entry.share < 0.1 ? 1 : 0)}%`}</b>
+                  <Show when={sharesKnown()}>
+                    <b>{`${(entry.share * 100).toFixed(entry.share < 0.1 ? 1 : 0)}%`}</b>
+                  </Show>
                 </li>
               )}
             </For>

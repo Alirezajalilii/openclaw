@@ -121,23 +121,23 @@ suite.define(() => {
           expect(removed.auth?.profiles?.["fixture:manual"]).toBeUndefined();
           expect(removed.model).toBe("fixture/current");
 
-        const authArgs = ["models", "auth"];
-        const agentArgs = ["--agent", "main"];
-        const args = [...authArgs, "paste-api-key", "--provider", "fixture", ...agentArgs];
-        const pasted = spawnSync(process.execPath, ["scripts/run-node.mjs", ...args], {
-          env: instance.env,
-          input: key,
-          encoding: "utf8",
-          timeout: 30_000,
-        });
-        expect(pasted.status, pasted.stderr).toBe(0);
-        expect(pasted.stderr, authRefreshDiagnostics()).not.toContain("could not refresh");
-        expect(await persistedAuth()).toEqual(saved);
-        const logoutArgs = [...authArgs, "logout", "fixture:manual", ...agentArgs, "--yes"];
-        const refused = await instance.cli(logoutArgs);
-        expect(refused.code, refused.stderr).toBe(1);
-        expect(refused.stderr).toContain("stop the Gateway");
-        expect(await persistedAuth()).toEqual(saved);
+          const authArgs = ["models", "auth"];
+          const agentArgs = ["--agent", "main"];
+          const args = [...authArgs, "paste-api-key", "--provider", "fixture", ...agentArgs];
+          const pasted = spawnSync(process.execPath, ["scripts/run-node.mjs", ...args], {
+            env: instance.env,
+            input: key,
+            encoding: "utf8",
+            timeout: 30_000,
+          });
+          expect(pasted.status, pasted.stderr).toBe(0);
+          expect(pasted.stderr, authRefreshDiagnostics()).not.toContain("could not refresh");
+          expect(await persistedAuth()).toEqual(saved);
+          const logoutArgs = [...authArgs, "logout", "fixture:manual", ...agentArgs, "--yes"];
+          const refused = await instance.cli(logoutArgs);
+          expect(refused.code, refused.stderr).toBe(1);
+          expect(refused.stderr).toContain("stop the Gateway");
+          expect(await persistedAuth()).toEqual(saved);
 
           // CLI logout is offline-only; transfer custody after proving live-owner refusal.
           await instance.stopGateway();

@@ -508,10 +508,7 @@ suite.define(() => {
             heldMethods:
               moduleState === "cached"
                 ? []
-                : [
-                    "usage.status",
-                    ...(moduleState === "cold" ? ["models.authStatus"] : []),
-                  ],
+                : ["usage.status", ...(moduleState === "cold" ? ["models.authStatus"] : [])],
             methodResponses: {
               "config.get": {
                 config: defaultsConfig("openai/gpt-5.5"),
@@ -560,7 +557,10 @@ suite.define(() => {
             await waitForControlUiRoute(page, { routeId: "appearance" });
             await page.locator('a[href="/settings/model-providers"]').first().click();
             await waitForControlUiRoute(page, { routeId: "model-providers" });
-            await expectText(page.locator('[data-provider-id="openai"] .provider-row__plan'), "Pro");
+            await expectText(
+              page.locator('[data-provider-id="openai"] .provider-row__plan'),
+              "Pro",
+            );
             await page.locator('a[href="/settings/appearance"]').first().click();
             await waitForControlUiRoute(page, { routeId: "appearance" });
             await gateway.deferNext("usage.status");

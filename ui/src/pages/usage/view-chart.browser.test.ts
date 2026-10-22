@@ -10,6 +10,52 @@ import { CostBreakdownCompact, DailyChartCompact } from "./view-chart.tsx";
 registerUsageEnglish();
 afterEach(() => document.body.replaceChildren());
 
+it.each(["by-provider", "by-type"] as const)(
+  "keeps every annual column visible through resize in %s mode",
+  async (dailyChartMode) => {
+    const { page } = await import("vitest/browser");
+    const start = Date.parse("2024-01-01");
+    const daily = Array.from({ length: 366 }, (_, index) => ({
+      ...createEmptyCostUsageTotals(),
+      date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+      input: 100,
+      totalTokens: 100,
+    }));
+    const container = document.body.appendChild(document.createElement("div"));
+    mountSolid(
+      () =>
+        DailyChartCompact({
+          dailyEntries: daily,
+          selectedDays: [],
+          chartMode: "tokens",
+          dailyChartMode,
+          onDailyChartModeChange: () => {},
+          providerSeries: [],
+          onSelectDay: () => {},
+          range: { startDate: "2024-01-01", endDate: "2024-12-31", complete: true },
+        }),
+      { container },
+    );
+    flush();
+    for (const width of [1280, 390]) {
+      await page.viewport(width, 800);
+      const plot = container.querySelector<HTMLElement>(".daily-chart-bars")!;
+      const columns = [...plot.querySelectorAll<HTMLElement>(".daily-bar-wrapper")];
+      expect(columns).toHaveLength(366);
+      expect(columns.every((column) => column.getBoundingClientRect().width > 0)).toBe(true);
+      expect(
+        columns.every(
+          (column) => column.querySelector(".daily-bar")!.getBoundingClientRect().width > 0,
+        ),
+      ).toBe(true);
+      expect(columns.at(-1)!.getBoundingClientRect().right).toBeLessThanOrEqual(
+        plot.getBoundingClientRect().right + 1,
+      );
+      expect(plot.scrollWidth).toBeLessThanOrEqual(plot.clientWidth + 1);
+    }
+  },
+);
+
 it("keeps token segments proportional and legend markers round beside form styles", async () => {
   const { page } = await import("vitest/browser");
   await page.viewport(1100, 800);

@@ -44,10 +44,7 @@ type SharedModelProvidersProps = Omit<DefaultModelsViewProps, "models" | "select
   ProviderProfilesViewProps;
 type ModelProvidersOwnerProps = Omit<
   ReturnType<ModelProvidersOwner["viewProps"]>["props"],
-  | keyof SharedModelProvidersProps
-  | "installedAgents"
-  | "defaultModels"
-  | "providerQuery"
+  keyof SharedModelProvidersProps | "installedAgents" | "defaultModels" | "providerQuery"
 >;
 
 export type ModelProvidersViewProps = SharedModelProvidersProps & {

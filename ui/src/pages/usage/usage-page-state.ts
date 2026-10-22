@@ -15,26 +15,23 @@ import { projectMutableSource } from "../../lib/reactive/projection.ts";
 import type { SessionUsageQuery } from "../../lib/sessions/usage.ts";
 import { isUsageCacheIncomplete, resolveUsagePublication } from "./cache-status.ts";
 import { createUsageExportRequest } from "./export.ts";
-import { createDefaultUsageDateRange, toggleUsageRangeSelection } from "./helpers.ts";
+import {
+  createDefaultUsageDateRange,
+  DEFAULT_USAGE_SESSION_SORT,
+  toggleUsageRangeSelection,
+} from "./helpers.ts";
 import { createProviderUsageLoader } from "./provider-usage-load.ts";
 import { UsageRefreshPolicy } from "./refresh-policy.ts";
 import { requestUsageSnapshot } from "./request-usage-snapshot.ts";
 import { createUsageDetails } from "./usage-details.ts";
 import type {
   UsageDetailPresentation,
+  UsagePresentation,
   UsageDisplayState,
   UsageFilterState,
   UsageRouteData,
   UsageSessionEntry,
 } from "./usage-state-types.ts";
-
-type UsagePresentation = {
-  display: Pick<
-    UsageDisplayState,
-    "chartMode" | "dailyChartMode" | "contextExpanded" | "headerPinned"
-  >;
-  detail: UsageDetailPresentation;
-};
 
 export function createUsagePage(context: ApplicationContext) {
   let publish = () => {};
@@ -59,8 +56,8 @@ export function createUsagePage(context: ApplicationContext) {
   };
   // Sorting and recent selection belong to the next request, before Solid commits.
   let display: Omit<UsageDisplayState, keyof UsagePresentation["display"]> = {
-    sessionSort: "cost",
-    sessionSortDir: "desc",
+    sessionSort: DEFAULT_USAGE_SESSION_SORT.sort,
+    sessionSortDir: DEFAULT_USAGE_SESSION_SORT.sortDirection,
     recentSessions: [],
     sessionsTab: "all",
   };
@@ -531,6 +528,7 @@ export function createUsagePage(context: ApplicationContext) {
         read: !routeDataInitialized ? routeRead.promise : (dateRead?.promise ?? usageRequest.read),
         exporting: usageExportRequest.pending,
         error: usageError,
+        partialNotice: usageResult()?.partial?.message ?? null,
         sessions: usageRosterResult()?.sessions ?? [],
         sessionPage: usageRosterResult()?.overview,
         creatorOptions: usageCreatorOptions(),

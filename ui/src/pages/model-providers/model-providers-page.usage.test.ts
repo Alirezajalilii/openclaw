@@ -274,12 +274,16 @@ describe("ModelProvidersPage usage convergence", () => {
     const usage = deferred<unknown>();
     const original = harness.request.getMockImplementation()!;
     let usageReads = 0;
+    let usageFails = true;
     harness.request.mockImplementation(async (method, ...args) => {
       if (method === "usage.status") {
         if (++usageReads === 1) {
           return usage.promise;
         }
-        throw new Error("Usage temporarily unavailable");
+        if (usageFails) {
+          throw new Error("Usage temporarily unavailable");
+        }
+        return { updatedAt: 2, providers: [] };
       }
       if (method === "models.authStatus") {
         return createAuthStatus([{ status: "missing", profiles: [] }]);
@@ -321,5 +325,14 @@ describe("ModelProvidersPage usage convergence", () => {
     expect(page.querySelector('[data-provider-id="openai"]')).toBe(row);
     expect(page.querySelector(".model-providers__search input")).toBe(search);
     expect(document.activeElement).toBe(search);
+    expect(row.querySelector(".provider-row__plan")?.textContent).toBe("Pro");
+    usageFails = false;
+    page.view.props.onRefresh();
+    await waitForSolid(() => {
+      expect(page.view.props.providerUsageFailed).toBe(false);
+      expect(page.view.props.cards.find((card) => card.id === "openai")?.usage).toBeUndefined();
+    });
+    expect(page.querySelector(".provider-row__plan")).toBeNull();
+    expect(requestCount(harness.request, "sessions.usage")).toBe(0);
   });
 });

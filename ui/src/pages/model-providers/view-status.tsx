@@ -36,7 +36,7 @@ function renderAuthStatus(card: ModelProviderCard) {
 }
 
 export function hasProviderCredentials(card: ModelProviderCard): boolean {
-  return card.hasConfigApiKey || Boolean(card.apiKey) || card.profiles.length > 0;
+  return card.configApiKeys.length > 0 || Boolean(card.apiKey) || card.profiles.length > 0;
 }
 
 /**

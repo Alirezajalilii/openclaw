@@ -3,8 +3,11 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import { createEmptyCostUsageTotals } from "../../../src/infra/session-cost-usage-totals.js";
 import { buildAggregatesFromSessions } from "../pages/usage/view.test-support.ts";
-import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import {
+  takeControlUiScreenshotFrame,
+  takeControlUiViewportScreenshot,
+} from "../test-helpers/control-ui-e2e-screenshot.ts";
+import { installMockGateway, waitForControlUiRoute } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import { installUsageOverviewGateway } from "./usage-overview-fixture.test-support.ts";
 
@@ -14,7 +17,7 @@ const suite = createControlUiE2eSuite({
 });
 
 suite.define(() => {
-  it("preserves a quoted label when selecting a provider", async () => {
+  it("loads sessions by cost and preserves a quoted label when selecting a provider", async () => {
     await suite.withPage(
       {
         locale: "en-US",
@@ -23,6 +26,8 @@ suite.define(() => {
         serviceWorkers: "block",
       },
       async ({ page }) => {
+        const pageErrors: string[] = [];
+        page.on("pageerror", (error) => pageErrors.push(error.message));
         await page.clock.setFixedTime(new Date("2026-08-07T12:00:00Z"));
         const sessions = ["Team Planning", "Research Review", "Team Quarterly Planning"].map(
           (label, index) => {
@@ -40,6 +45,19 @@ suite.define(() => {
                 totalTokens: tokens,
                 inputCost: tokens / 100,
                 totalCost: tokens / 100,
+                activityDates: ["2026-08-07"],
+                dailyBreakdown: [
+                  {
+                    ...createEmptyCostUsageTotals(),
+                    date: "2026-08-07",
+                    input: tokens,
+                    totalTokens: tokens,
+                    inputCost: tokens / 100,
+                    totalCost: tokens / 100,
+                    tokens,
+                    cost: tokens / 100,
+                  },
+                ],
               },
             };
           },
@@ -63,10 +81,28 @@ suite.define(() => {
             "usage.status": { updatedAt: 1, providers: [] },
           },
         });
-        await page.goto(`${suite.server.baseUrl}usage`);
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        await waitForControlUiRoute(page, { routeId: "model-providers" });
+        await page.locator(".model-providers__search input").waitFor();
+        await page.evaluate(() => window.openclawControlUi!.navigate("usage"));
+        await waitForControlUiRoute(page, { routeId: "usage" });
         const query = page.locator(".usage-query-input");
         const rows = page.locator(".sessions-card .session-bar-title");
+        await expect
+          .poll(() => rows.allTextContents())
+          .toEqual(["Research Review", "Team Quarterly Planning", "Team Planning"]);
+        const initialUsageRequests = await gateway.getRequests("sessions.usage");
+        expect(initialUsageRequests).toHaveLength(1);
+        expect(initialUsageRequests[0]?.params).toMatchObject({
+          sort: "cost",
+          sortDirection: "desc",
+        });
+        await gateway.deferNext("sessions.usage");
+        await page.locator(".sessions-sort select").selectOption("recent");
+        await gateway.waitForRequest("sessions.usage", { match: { sort: "recent" } });
+        await gateway.resolveDeferred("sessions.usage");
         await expect.poll(() => rows.count()).toBe(3);
+        expect(pageErrors).toEqual([]);
         await query.fill('"label:Team Planning"');
         await query.press("Enter");
         await expect.poll(() => rows.allTextContents()).toEqual(["Team Planning"]);
@@ -96,7 +132,7 @@ suite.define(() => {
         expect(await page.locator(".usage-metric-badge").allTextContents()).toEqual([
           "100 Tokens",
           "$1.00 Cost",
-          "1 session",
+          "1 Sessions",
         ]);
       },
     );
@@ -112,6 +148,17 @@ suite.define(() => {
       },
       async ({ page }) => {
         await page.clock.setFixedTime(new Date("2026-08-07T12:00:00Z"));
+        const artifacts = suite.artifactDir;
+        const capture = async (name: string) => {
+          if (process.env.OPENCLAW_CAPTURE_UI_PROOF === "1") {
+            await fs.writeFile(
+              path.join(artifacts, `${name}.png`),
+              await takeControlUiViewportScreenshot(page, page.locator(".usage-page"), [
+                page.locator(".usage-metric-badge").first(),
+              ]),
+            );
+          }
+        };
         const totals = {
           ...createEmptyCostUsageTotals(),
           input: 125000,
@@ -215,20 +262,22 @@ suite.define(() => {
         await expect
           .poll(() => page.locator(".session-bar-meta").first().textContent())
           .toContain("1m");
-        const fullHeight = await page
-          .locator(".usage-page")
-          .evaluate((element) => Math.ceil(element.scrollHeight) + 400);
-        const fullFrame = await takeControlUiScreenshotFrame(
-          page,
-          page.locator(".usage-page"),
-          [page.locator(".usage-header"), rows.first(), page.locator(".data-table-pagination")],
-          {
-            animations: "disabled",
-            viewport: { width: 1440, height: fullHeight },
-          },
-        );
-        await writeFile(path.join(artifacts, "overview-and-sessions.png"), fullFrame.png);
-        await page.setViewportSize({ width: 1440, height: 1100 });
+        if (process.env.OPENCLAW_CAPTURE_UI_PROOF === "1") {
+          const fullHeight = await page
+            .locator(".usage-page")
+            .evaluate((element) => Math.ceil(element.scrollHeight) + 400);
+          const fullFrame = await takeControlUiScreenshotFrame(
+            page,
+            page.locator(".usage-page"),
+            [page.locator(".usage-header"), rows.first(), page.locator(".data-table-pagination")],
+            {
+              animations: "disabled",
+              viewport: { width: 1440, height: fullHeight },
+            },
+          );
+          await fs.writeFile(path.join(artifacts, "overview-and-sessions.png"), fullFrame.png);
+          await page.setViewportSize({ width: 1440, height: 1100 });
+        }
         await expect
           .poll(() => page.locator(".usage-metric-badge").allTextContents())
           .toEqual(["125.0K Tokens", "$125.00 Cost", "1,250 Sessions"]);
@@ -258,7 +307,7 @@ suite.define(() => {
           .poll(() => page.locator(".usage-metric-badge").allTextContents())
           .toEqual(["100 Tokens", "$0.10 Cost", "1 Sessions"]);
         await capture("filtered-beyond-thousand");
-        await writeFile(
+        await fs.writeFile(
           path.join(artifacts, "requests.json"),
           JSON.stringify(await gateway.getRequests("sessions.usage"), null, 2),
         );

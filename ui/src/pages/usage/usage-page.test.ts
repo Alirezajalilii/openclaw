@@ -46,7 +46,9 @@ describe("UsagePage cache convergence", () => {
     const request = usageRequest(() => result);
     const { page } = await loadUsagePage(request);
     expect(page.querySelector(".callout.danger")).toBeNull();
-    expect(page.querySelector(".usage-lower-bound:not(.usage-lower-bound--off)")?.textContent).toContain(message);
+    expect(
+      page.querySelector(".usage-lower-bound:not(.usage-lower-bound--off)")?.textContent,
+    ).toContain(message);
     expect(page.textContent).not.toContain("Select a date range and click Refresh");
 
     result = cacheSnapshot("fresh").result;

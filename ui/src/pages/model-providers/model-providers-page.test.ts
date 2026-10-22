@@ -58,7 +58,8 @@ describe("ModelProvidersPage agent scope", () => {
       selectionIntentRevision: context.settingsAgentSelection.intentRevision,
       data: {
         ...EMPTY_MODEL_PROVIDERS_DATA,
-        providerUsage: { ok: false as const },
+        providerUsage: null,
+        providerUsageFailed: true,
         updatedAt: Date.now(),
       },
       client: snapshot.client,

@@ -1102,9 +1102,14 @@ const enSettings = {
     remove: {
       action: "Remove provider",
       title: "Remove {provider}",
-      confirm:
-        "Sign out every saved account and delete the saved API key for {provider}? Runs using it stop. You can connect it again later.",
-      kept: "{source} stays; remove it there to disconnect fully.",
+      accounts:
+        "Remove the saved accounts for {provider} available to this agent? Shared accounts are also removed for other agents that use them. Active runs for this provider on the selected agent may stop.",
+      keys: "Saved API keys for {key} and its configured aliases will also be deleted. Provider settings and external secrets stay in place.",
+      kept: "Kept: {source}. Manage external credentials at their source to disconnect fully.",
+      secretReferences: "Secret references in {keys}",
+      accessChanged:
+        "The connection, agent, or access changed. No further credentials were removed.",
+      partial: "Saved accounts removed so far: {count}. Remaining removals did not complete.",
     },
     add: {
       title: "Add provider",

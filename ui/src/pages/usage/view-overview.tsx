@@ -164,20 +164,23 @@ function renderFilterChips(
 }
 
 /** Daily cost per calendar day of a window, zero-filled; null for ranges too long to draw as columns. */
-/** Daily cost per calendar day of a window, zero-filled; null for ranges too long to draw as columns. */
-function windowDailyCosts(costs: Map<string, number>, endDate: string, days: number) {
+function windowDailyCosts(costs: Map<string, CostDailyEntry>, endDate: string, days: number) {
   if (days < 2 || days > 92) {
     return null;
   }
   const start = Date.parse(endDate) - (days - 1) * 86_400_000;
   return Array.from({ length: days }, (_, index) => {
     const date = new Date(start + index * 86_400_000).toISOString().slice(0, 10);
-    return { date, cost: costs.get(date) ?? 0 };
+    const entry = costs.get(date);
+    return { date, cost: entry?.totalCost ?? 0, usageReport: entry?.usageReport };
   });
 }
 
 /** Mini daily columns: tinted by value, the newest day in full accent, a readout on hover. */
-function CostColumns(props: { days: Array<{ date: string; cost: number }>; label: string }) {
+function CostColumns(props: {
+  days: NonNullable<ReturnType<typeof windowDailyCosts>>;
+  label: string;
+}) {
   const max = () => Math.max(0, ...props.days.map((day) => day.cost));
   const [hover, setHover] = createSignal<number | null>(null);
   const active = () => {
@@ -215,7 +218,8 @@ function CostColumns(props: { days: Array<{ date: string; cost: number }>; label
       <Show when={active()}>
         {(day) => (
           <span class="usage-bars__tip">
-            {formatDayLabel(day().date)} · <b>{formatAnalysisCost(day().cost)}</b>
+            {formatDayLabel(day().date)} ·{" "}
+            <b>{formatAnalysisCost(day().cost, day().usageReport)}</b>
           </span>
         )}
       </Show>
@@ -235,7 +239,7 @@ function renderCostWindowComparison(
   }
 
   const today = formatIsoDate(new Date(), timeZone);
-  const costs = new Map(daily.map((day) => [day.date, day.totalCost]));
+  const costs = new Map(daily.map((day) => [day.date, day]));
 
   return (
     <SettingsSection
@@ -347,8 +351,7 @@ export function UsageInsights(props: {
       return undefined;
     }
 
-    // Partial tokens over exact counts or durations are lower bounds; a ratio with partial
-    // values on both sides (cache hit rate) is only approximate.
+    // Ratios of partial counters are neither exact nor lower bounds.
     const report = totals.usageReport;
     const partial = report?.state === "unavailable";
     const empty = t("usage.common.emptyValue");
@@ -358,21 +361,15 @@ export function UsageInsights(props: {
     const avgCost = aggregates.messages.total ? totals.totalCost / aggregates.messages.total : 0;
     const cacheBase = totals.input + totals.cacheRead + totals.cacheWrite;
     const cacheHitRate = cacheBase > 0 ? totals.cacheRead / cacheBase : 0;
-    const cacheHitPercent = `${(cacheHitRate * 100).toFixed(1)}%`;
-    const cacheHitLabel =
-      cacheBase <= 0
-        ? empty
-        : partial
-          ? t("usage.common.approx", { value: cacheHitPercent })
-          : cacheHitPercent;
+    const cacheHitLabel = cacheBase > 0 && !partial ? `${(cacheHitRate * 100).toFixed(1)}%` : empty;
     const errorRatePct = stats.errorRate * 100;
     const throughputLabel =
-      stats.throughputTokensPerMin !== undefined
-        ? `${formatUsageTokens(Math.round(stats.throughputTokensPerMin), report)} ${t("usage.overview.tokensPerMinute")}`
+      stats.throughputTokensPerMin !== undefined && !partial
+        ? `${formatUsageTokens(Math.round(stats.throughputTokensPerMin))} ${t("usage.overview.tokensPerMinute")}`
         : t("usage.common.emptyValue");
     const throughputCostLabel =
-      stats.throughputCostPerMin !== undefined
-        ? `${formatAnalysisCost(stats.throughputCostPerMin, report)} ${t("usage.overview.perMinute")}`
+      stats.throughputCostPerMin !== undefined && !partial
+        ? `${formatAnalysisCost(stats.throughputCostPerMin)} ${t("usage.overview.perMinute")}`
         : t("usage.common.emptyValue");
     const avgDurationLabel =
       stats.durationCount > 0
@@ -482,8 +479,8 @@ export function UsageInsights(props: {
       aggregates,
       throughputLabel,
       throughputCostLabel,
-      avgTokensLabel: formatUsageTokens(avgTokens, report),
-      avgCostLabel: formatAnalysisCost(avgCost, report),
+      avgTokensLabel: partial ? empty : formatUsageTokens(avgTokens),
+      avgCostLabel: partial ? empty : formatAnalysisCost(avgCost),
       partial,
       report,
       cacheHitLabel,

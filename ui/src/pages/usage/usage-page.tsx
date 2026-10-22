@@ -22,10 +22,7 @@ export function UsagePage(props: { routeData?: UsageRouteData }) {
 export function UsagePageContent(props: { state: UsageProps; result: SessionsUsageResult | null }) {
   return (
     <UsagePageShell result={props.result}>
-      <UsageView
-        {...props.state}
-        data={{ ...props.state.data, partialNotice: props.result?.partial?.message ?? null }}
-      />
+      <UsageView {...props.state} />
     </UsagePageShell>
   );
 }

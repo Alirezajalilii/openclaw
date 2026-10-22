@@ -30,7 +30,6 @@ function mountInsights(currentTotals: () => UsageTotals, currentAggregates: () =
       },
       stats: { durationCount: 0, avgDurationMs: 0, errorRate: 0 },
       showCostHint: false,
-      showCostShares: true,
       errorHours: [],
       sessionCount: 1,
       totalSessions: 1,
@@ -191,20 +190,28 @@ it("preserves filter-chip order, session-only title, labels, and clear callbacks
   expect(onClearSessions).toHaveBeenCalledOnce();
 });
 
-it("cost windows preserve sub-cent totals and daily averages", () => {
-  const { container } = mountView(() =>
-    renderCostWindowComparison(
-      [dailyEntry("2026-07-01", 300, 0.003)],
-      "2026-06-02",
-      "2026-07-01",
-      "local",
-    ),
-  );
+it.each([false, true])(
+  "cost windows preserve sub-cent totals and daily completeness (partial: %s)",
+  (partial) => {
+    const day = dailyEntry("2026-07-01", 300, 0.003);
+    if (partial) {
+      day.usageReport = { state: "unavailable" };
+    }
+    const { container } = mountView(() =>
+      renderCostWindowComparison([day], "2026-06-02", "2026-07-01", "local"),
+    );
 
-  const range = container.querySelector(".cost-window--range");
-  expect(text(range, ".cost-window__value")?.trim()).toBe("$0.0030");
-  expect(text(range, ".cost-window__meta")).toContain("$0.0001 / day");
-});
+    const range = container.querySelector(".cost-window--range");
+    const prefix = partial ? "≥ " : "";
+    expect(text(range, ".cost-window__value")?.trim()).toBe(`${prefix}$0.0030`);
+    expect(text(range, ".cost-window__meta")).toContain(`${prefix}$0.0001 / day`);
+    range!
+      .querySelector(".usage-bars__bar:last-of-type")!
+      .dispatchEvent(new MouseEvent("pointerenter"));
+    flush();
+    expect(text(range, ".usage-bars__tip")).toBe(`Jul 1 · ${prefix}$0.0030`);
+  },
+);
 
 describe("SessionsCard", () => {
   const session = (key: string, tokens = 100): UsageSessionEntry => ({
@@ -346,7 +353,7 @@ describe("SessionsCard", () => {
       expect(average()).toMatch(/^≥ /);
       setDisplay({ ...base.display, chartMode: "cost" });
       flush();
-      expect(value()).toBe(atLeast("$0.00"));
+      expect(value()).toBe("≥ $0.00");
       await i18n.setLocale("en");
       flush();
       expect(container.querySelector(".session-bar-row")).toBe(row);

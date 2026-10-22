@@ -1363,7 +1363,7 @@
 .daily-chart-bars {
   display: grid;
   grid-template-columns: repeat(var(--daily-columns), minmax(0, 1fr));
-  gap: clamp(1px, 0.35vw, 4px);
+  column-gap: min(4px, calc(25% / var(--daily-columns)));
   height: 11rem;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(var(--border) 1px, transparent 1px) top / 100% 50% repeat-y;

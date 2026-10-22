@@ -1,3 +1,4 @@
+import type { UsageSummary } from "../../../../src/infra/provider-usage.types.js";
 // Fetches the gateway signals behind the Models settings page.
 // Each source degrades independently: unavailable usage data must not blank
 // the provider list.
@@ -12,17 +13,16 @@ import {
 } from "../../lib/gateway-errors.ts";
 import { loadModelAuthStatus } from "../../lib/model-auth.ts";
 import { loadModelCatalog, modelCatalogRefreshError } from "../../lib/model-catalog-store.ts";
-import type { ProviderUsageRequestResult } from "../../lib/provider-usage-request.ts";
 
 registerSettingsEnglish();
 
-/** Local session-spend window shown on each card. */
 export type ModelProvidersData = {
   authStatus: ModelAuthStatusResult | null;
   /** Operation diagnostics; picker facts are owned by the shared catalog store. */
   providerOutcomes: ModelCatalogProviderOutcome[];
   catalogError: string | null;
-  providerUsage: ProviderUsageRequestResult | null;
+  providerUsage: UsageSummary | null;
+  providerUsageFailed: boolean;
   updatedAt: number | null;
   error: string | null;
 };
@@ -34,6 +34,7 @@ export const EMPTY_MODEL_PROVIDERS_DATA: ModelProvidersData = {
   providerOutcomes: [],
   catalogError: null,
   providerUsage: null,
+  providerUsageFailed: false,
   updatedAt: null,
   error: null,
 };
@@ -89,6 +90,7 @@ export async function loadModelProvidersData(
           ? modelCatalogRefreshError(catalog.result, t("modelProviders.defaults.discoverFailed"))
           : errorMessage(catalog.error),
     providerUsage: null,
+    providerUsageFailed: false,
     updatedAt: Date.now(),
     // Auth status is the primary provider list; its failure is the only one
     // worth surfacing as a page-level error.

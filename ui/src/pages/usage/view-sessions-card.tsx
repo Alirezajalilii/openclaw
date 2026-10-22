@@ -1,8 +1,8 @@
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import { For, Show, createMemo, createSignal } from "solid-js";
-import { providerDisplayLabel } from "../../components/provider-icon.ts";
 import { AgentRowChip } from "../../components/agent-row-chip.tsx";
 import { handleCopyButton } from "../../components/copy-button-state.ts";
+import { providerDisplayLabel } from "../../components/provider-icon.ts";
 import { Icon } from "../../components/solid/icon.tsx";
 import { SettingsSection, SettingsSegmented } from "../../components/solid/settings-ui.tsx";
 import { formatDurationCompact } from "../../lib/format-duration.ts";
@@ -314,7 +314,11 @@ function SessionRows(props: {
                       >
                         <Icon name="copy" />
                       </button>
-                      <span ref={(element) => (feedback = element)} class="session-bar-copy-feedback" hidden />{" "}
+                      <span
+                        ref={(element) => (feedback = element)}
+                        class="session-bar-copy-feedback"
+                        hidden
+                      />{" "}
                     </>
                   );
                 }}

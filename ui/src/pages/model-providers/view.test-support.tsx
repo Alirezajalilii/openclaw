@@ -18,7 +18,7 @@ export function card(overrides: Partial<ModelProviderCard> = {}): ModelProviderC
     profileOrderLocks: {},
     credentialProviderIds: ["openai"],
     logoutTargets: [],
-    hasConfigApiKey: false,
+    configApiKeys: [],
     modelCount: 1,
     availableModelCount: 1,
     apiKey: { source: "env", envVar: "OPENAI_API_KEY" },
@@ -112,4 +112,18 @@ export function mount(viewProps: ModelProvidersViewProps, container?: HTMLElemen
 
 export function text(element: Element | null): string {
   return element?.textContent?.replace(/\s+/gu, " ").trim() ?? "";
+}
+
+export function settingsRow(container: Element, label: string): HTMLElement {
+  const match = [...container.querySelectorAll<HTMLElement>(".settings-row")].find(
+    (candidate) =>
+      text(
+        candidate.querySelector(".model-providers__label-with-help > span:first-child") ??
+          candidate.querySelector(".settings-row__title"),
+      ) === label,
+  );
+  if (!match) {
+    throw new Error(`Missing settings row: ${label}`);
+  }
+  return match;
 }

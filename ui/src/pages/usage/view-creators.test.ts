@@ -103,32 +103,27 @@ it.each([
   ["telegram:200482621", "Telegram user 200482621"],
   ["telegram:group:-100123", "Telegram group"],
 ])("names the legacy channel creator %s as %s", (id, label) => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  mountSolid(
-    () =>
-      UsageCreators({
-        groups: [
-          {
-            key: JSON.stringify(["human", "channel", "main", "telegram", "default", id]),
-            actor: {
-              type: "human",
-              id,
-              identity: { type: "legacy", actorType: "human", source: null, id },
-            },
-            totals: createEmptyCostUsageTotals(),
-            sessionCount: 1,
-            daily: [],
-            sessionActivity: [],
+  const { container } = mountView(() =>
+    UsageCreators({
+      groups: [
+        {
+          key: JSON.stringify(["human", "channel", "main", "telegram", "default", id]),
+          actor: {
+            type: "human",
+            id,
+            identity: { type: "legacy", actorType: "human", source: null, id },
           },
-        ],
-        selectedKey: null,
-        mode: "cost",
-        onSelect: () => {},
-      }),
-    { container },
+          totals: createEmptyCostUsageTotals(),
+          sessionCount: 1,
+          daily: [],
+          sessionActivity: [],
+        },
+      ],
+      selectedKey: null,
+      mode: "cost",
+      onSelect: () => {},
+    }),
   );
-  flush();
   // Raw sender ids read as people and places, never as opaque keys.
   expect(container.querySelector(".usage-creator-name")?.textContent).toContain(label);
 });

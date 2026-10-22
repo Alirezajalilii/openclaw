@@ -239,7 +239,7 @@ it.each<[string, CardsInput, unknown[]]>([
         configKey: "OpenAI",
         configAuthMode: "api-key",
         credentialProviderIds: ["OpenAI"],
-        hasConfigApiKey: true,
+        configApiKeys: [{ key: "OpenAI", reference: true }],
         profiles: [],
       },
     ],
