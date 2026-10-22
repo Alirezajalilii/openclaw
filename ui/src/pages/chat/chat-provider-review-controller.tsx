@@ -2,7 +2,9 @@ import {
   action,
   createMemo,
   createOptimistic,
+  createSignal,
   createStore,
+  Errored,
   lazy,
   Loading,
   onCleanup,
@@ -114,6 +116,10 @@ export function createChatProviderReview(deps: {
     if (!current) {
       return null;
     }
+    const [completion, setCompletion] = createSignal<Promise<void>>();
+    const completed = createMemo(() => completion()?.then(() => null) ?? null, {
+      loadingValue: null,
+    });
     const [pending, setPending] = createOptimistic(false);
     const [checking, setChecking] = createOptimistic(false);
     const [presentation, setPresentation] = createStore<ReviewPresentation>(
@@ -145,7 +151,17 @@ export function createChatProviderReview(deps: {
         failedAttemptId: null,
       },
     );
-    return { current, presentation, setPresentation, pending, setPending, checking, setChecking };
+    return {
+      current,
+      presentation,
+      setPresentation,
+      pending,
+      setPending,
+      checking,
+      setChecking,
+      setCompletion,
+      completed,
+    };
   });
   type ReviewActivity = NonNullable<ReturnType<typeof activity>>;
   const isCurrent = (current: ReviewBinding) =>
@@ -156,6 +172,11 @@ export function createChatProviderReview(deps: {
         Object.assign(draft, patch);
       });
     }
+  };
+  const observe = (active: ReviewActivity, operation: Promise<void>) => {
+    void active.setCompletion(operation);
+    // The boundary observes the original rejection; retired views still consume the command.
+    return operation.catch(() => {});
   };
   const recordFailedAttempt = (active: ReviewActivity, error: string) => {
     const current = active.current;
@@ -180,8 +201,6 @@ export function createChatProviderReview(deps: {
       if (outcome?.status === "failed") {
         update(active, { error: t("chat.providerReview.refreshFailed") });
       }
-    } catch {
-      update(active, { error: t("chat.providerReview.refreshFailed") });
     } finally {
       current.checking = false;
     }
@@ -227,8 +246,6 @@ export function createChatProviderReview(deps: {
       update(active, { submitted: true });
       // A transport ACK does not clear the pause. Only the canonical row can do that.
       yield refresh(active);
-    } catch (error) {
-      update(active, { error: formatUiError(error) });
     } finally {
       current.continuing = false;
     }
@@ -254,26 +271,25 @@ export function createChatProviderReview(deps: {
   });
   return {
     view,
+    completed: () => activity()?.completed(),
     async open() {
       const active = activity();
       if (!active || !isCurrent(active.current) || active.presentation.loading) {
         return;
       }
       update(active, { loading: true });
-      try {
-        await ProviderReviewModal.preload();
-        update(active, { open: true });
-      } catch (error) {
-        update(active, { error: formatUiError(error) });
-      } finally {
-        update(active, { loading: false });
-      }
+      return observe(
+        active,
+        ProviderReviewModal.preload()
+          .then(() => update(active, { open: true }))
+          .finally(() => update(active, { loading: false })),
+      );
     },
     close: () => update(activity(), { open: false }),
     refresh() {
       const active = activity();
       if (active?.presentation.open) {
-        void refresh(active);
+        void observe(active, refresh(active));
       }
     },
     async acknowledge() {
@@ -306,7 +322,10 @@ export function createChatProviderReview(deps: {
       }
       current.continuing = true;
       // Flush the owner's immediate queue hold before opening the presentation transaction.
-      return Promise.resolve().then(() => continueReview(active));
+      return observe(
+        active,
+        Promise.resolve().then(() => continueReview(active)),
+      );
     },
   };
 }
@@ -345,7 +364,20 @@ export function ChatProviderReviewNotice(props: ProviderReviewViewProps) {
                     : "chat.providerReview.stoppedBody",
                 )}
               </span>
-              {view().error && !view().dialog ? <span>{view().error}</span> : null}
+              <Show
+                when={!view().dialog && !view().loading && !view().pending && !view().refreshing}
+              >
+                <Show
+                  when={view().error}
+                  fallback={
+                    <Errored fallback={(error) => <span>{formatUiError(error())}</span>}>
+                      {props.owner.completed()}
+                    </Errored>
+                  }
+                >
+                  {(error) => <span>{error()}</span>}
+                </Show>
+              </Show>
             </div>
             {hasFindings ? (
               <button
@@ -366,6 +398,14 @@ export function ChatProviderReviewNotice(props: ProviderReviewViewProps) {
 
 export function ChatProviderReviewDialog(props: ProviderReviewViewProps) {
   const view = () => props.owner.view();
+  const status = () =>
+    view().submitted && !view().error ? (
+      <p role="status">
+        {t(
+          view().refreshing ? "chat.providerReview.checkingStatus" : "chat.providerReview.waiting",
+        )}
+      </p>
+    ) : null;
   return (
     <Show when={view().dialog} keyed>
       {(binding) => {
@@ -410,20 +450,29 @@ export function ChatProviderReviewDialog(props: ProviderReviewViewProps) {
                         : "chat.providerReview.queueStopped",
                     )}
                   </p>
-                  {view().error ? (
-                    <p class="callout danger" role="alert">
-                      {view().error}
-                    </p>
-                  ) : null}
-                  {view().submitted && !view().error ? (
-                    <p role="status">
-                      {t(
-                        view().refreshing
-                          ? "chat.providerReview.checkingStatus"
-                          : "chat.providerReview.waiting",
+                  <Show when={!view().pending && !view().refreshing} fallback={status()}>
+                    <Show
+                      when={view().error}
+                      fallback={
+                        <Errored
+                          fallback={(error) => (
+                            <p class="callout danger" role="alert">
+                              {formatUiError(error())}
+                            </p>
+                          )}
+                        >
+                          {props.owner.completed()}
+                          {status()}
+                        </Errored>
+                      }
+                    >
+                      {(error) => (
+                        <p class="callout danger" role="alert">
+                          {error()}
+                        </p>
                       )}
-                    </p>
-                  ) : null}
+                    </Show>
+                  </Show>
                 </div>
                 <openclaw-modal-actions class="exec-approval-actions">
                   <button
