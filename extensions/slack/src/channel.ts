@@ -601,8 +601,7 @@ export const slackPlugin = createChatChannelPlugin<ResolvedSlackAccount, SlackPr
           ...(account.identity === "user" ? { identity: "user" } : {}),
         });
       },
-      formatCapabilitiesProbe: ({ probe }) => {
-        const slackProbe = probe as SlackProbe | undefined;
+      formatCapabilitiesProbe: ({ probe: slackProbe }) => {
         const lines = [];
         if (slackProbe?.warning) {
           lines.push({ text: `Warning: ${slackProbe.warning}`, tone: "warn" } as const);
