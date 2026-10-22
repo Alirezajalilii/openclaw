@@ -34,7 +34,7 @@ const directoryAccount = (accountId: string, enabled = true) => ({
 
 async function expectRepeatedResolution(input: string, kind: "channel" | "group") {
   const params = { input, client: fixtureClient() };
-  const expected = { kind, id: input, to: `channel:${input}` };
+  const expected = { kind, to: `channel:${input}` };
   await expect(resolveMattermostOpaqueTarget(params)).resolves.toEqual(expected);
   await expect(resolveMattermostOpaqueTarget(params)).resolves.toEqual(expected);
 }
@@ -163,7 +163,7 @@ describe("mattermost target resolution", () => {
     release.resolve();
     expect(fetchMattermostUser).toHaveBeenCalledTimes(3);
     expect(await Promise.all(pending)).toEqual(
-      Array.from({ length: 4 }, () => ({ kind: "user", id: input, to: `user:${input}` })),
+      Array.from({ length: 4 }, () => ({ kind: "user", to: `user:${input}` })),
     );
   });
 
