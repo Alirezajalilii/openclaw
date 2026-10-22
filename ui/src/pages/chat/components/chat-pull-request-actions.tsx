@@ -52,17 +52,14 @@ export function PullRequestActions(props: {
   const parentPresented = useContext(ContentPresentation);
   let menu: MenuHandle | undefined;
   const [page, setPage] = createSignal<"home" | "checks" | "monitoring">("home");
-  let backButton: HTMLButtonElement | undefined;
-  let checksButton: HTMLButtonElement | undefined;
-  let monitoringButton: HTMLButtonElement | undefined;
   const navigate = (next: "checks" | "monitoring") => {
     setPage(next);
-    queueMicrotask(() => backButton?.focus());
+    queueMicrotask(() => menu?.itemElement("back")?.focus());
   };
   const back = () => {
-    const previous = page();
+    const previous = page() === "checks" ? "checks" : "monitoring";
     setPage("home");
-    queueMicrotask(() => (previous === "checks" ? checksButton : monitoringButton)?.focus());
+    queueMicrotask(() => menu?.itemElement(previous)?.focus());
   };
   const [menuOpen, setMenuOpen] = createSignal(false);
   const presentation = createMemo(() => projectPresentation(props.presented));
@@ -160,14 +157,7 @@ export function PullRequestActions(props: {
     label: t("common.back"),
     closeOnSelect: false,
     render: (attributes) => (
-      <button
-        {...attributes}
-        ref={(element) => {
-          backButton = element;
-        }}
-        class="oc-menu-item chat-pr-menu__back"
-        type="button"
-      >
+      <button {...attributes} class="oc-menu-item chat-pr-menu__back" type="button">
         <span class="oc-menu-item__icon">
           <Icon name="arrowLeft" />
         </span>
@@ -271,9 +261,6 @@ export function PullRequestActions(props: {
                 render: (attributes) => (
                   <button
                     {...attributes}
-                    ref={(element) => {
-                      checksButton = element;
-                    }}
                     class="oc-menu-item chat-pr-menu__drill-trigger"
                     type="button"
                   >
@@ -339,9 +326,6 @@ export function PullRequestActions(props: {
             render: (attributes) => (
               <button
                 {...attributes}
-                ref={(element) => {
-                  monitoringButton = element;
-                }}
                 class="oc-menu-item chat-pr-menu__drill-trigger"
                 type="button"
               >
