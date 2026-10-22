@@ -72,7 +72,7 @@ export function createPullRequestCopy(options: {
             throw new Error("Clipboard copy failed");
           }
         })
-        .catch((cause) => {
+        .catch((cause: unknown) => {
           if (current(attempt)) {
             throw cause;
           }

@@ -21,9 +21,12 @@ export async function copyToClipboard(
     return false;
   }
   // Copy controls can lose focus when disabled while the async transport settles.
-  const overlay = registryFor(document).stack.findLast(
-    (entry) => entry.open && entry.contains(document.activeElement),
-  );
+  const overlay =
+    typeof document === "undefined"
+      ? undefined
+      : registryFor(document).stack.findLast(
+          (entry) => entry.open && entry.contains(document.activeElement),
+        );
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
