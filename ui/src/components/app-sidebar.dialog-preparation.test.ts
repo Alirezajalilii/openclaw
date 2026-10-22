@@ -64,7 +64,7 @@ it.each([
   const sessions = createSessionsHarness("main", ["agent:main:draft"]);
   sessions.publish({
     groups: ["Drafts"],
-    groupSettings: [{ name: "Drafts", cwd: "/synthetic/work" }],
+    groupSettings: [{ name: "Drafts", position: 0, cwd: "/synthetic/work" }],
   });
   const { sidebar } = await mountSidebar(gateway.gateway, sessions.sessions);
   sidebar.connected = true;
