@@ -633,12 +633,22 @@ export function CommandPaletteView(props: { readProps: () => CommandPaletteProps
           </div>
           <Show when={current().draft.attachmentMode}>
             <div class="cmd-palette__footer">
+              <Show when={!isMobileBrowserPlatform()}>
+                <PaletteHint
+                  shortcut={<KeyboardShortcut combo={KEYBOARD_SHORTCUT_COMBOS.modifiedEnter} />}
+                  label={t("palette.startSession")}
+                />
+              </Show>
               <PaletteHint
-                shortcut={<KeyboardShortcut combo={KEYBOARD_SHORTCUT_COMBOS.modifiedEnter} />}
-                label={t("palette.startSession")}
-              />
-              <PaletteHint
-                shortcut={<KeyboardShortcut combo={KEYBOARD_SHORTCUT_COMBOS.newline} />}
+                shortcut={
+                  <KeyboardShortcut
+                    combo={
+                      isMobileBrowserPlatform()
+                        ? KEYBOARD_SHORTCUT_COMBOS.sendMessage
+                        : KEYBOARD_SHORTCUT_COMBOS.newline
+                    }
+                  />
+                }
                 label={t("palette.footer.newline")}
               />
             </div>

@@ -403,9 +403,11 @@ describe("command palette attachments", () => {
   });
 });
 
-it("keeps mobile palette Return native and starts only from its button", async () => {
+it("keeps mobile attachment Return native and starts only from its button", async () => {
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Android");
-  const { palette, input, start, context } = await mount();
+  const { palette, input, query, start, context, expectSubmit } = await mount();
+  paste(input, [image()]);
+  finishRead(0);
   input.value = "A mobile prompt";
   input.dispatchEvent(new Event("input", { bubbles: true }));
   await vi.waitFor(() => expect(start().disabled).toBe(false));
@@ -416,6 +418,15 @@ it("keeps mobile palette Return native and starts only from its button", async (
     expect(palette.isOpen).toBe(true);
   }
   expect(start().querySelector("kbd")).toBeNull();
+  const footer = query<HTMLElement>(".cmd-palette > .cmd-palette__footer")!;
+  expect(footer.querySelectorAll("kbd")).toHaveLength(1);
+  expect(footer.querySelector("kbd")?.textContent).toMatch(/^(Enter|⏎)$/);
+  expect(footer.textContent).not.toContain("Start session");
   start().click();
-  await vi.waitFor(() => expect(context.sessions.createResult).toHaveBeenCalledOnce());
+  await vi.waitFor(() =>
+    expectSubmit({
+      message: "A mobile prompt",
+      attachments: [expect.objectContaining(imageFields)],
+    }),
+  );
 });

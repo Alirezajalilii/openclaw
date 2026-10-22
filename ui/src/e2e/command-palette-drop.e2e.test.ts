@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Locator } from "playwright";
+import { devices, type Locator } from "playwright";
 import { expect, it } from "vitest";
 import { takeControlUiScreenshotFrame } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import { reconnectMockGateway } from "../test-helpers/control-ui-e2e.ts";
@@ -242,7 +242,12 @@ suite.define(() => {
     "drops files into a dedicated new-session draft at $width px ($theme)",
     async ({ width, theme }) => {
       await suite.withPage(
-        { ...createControlUiE2eContextOptions(), viewport: { width, height: 900 } },
+        {
+          ...createControlUiE2eContextOptions(),
+          ...(width === 390 ? devices["Pixel 7"] : {}),
+          viewport: { width, height: 900 },
+          deviceScaleFactor: 1,
+        },
         async ({ page }) => {
           const gateway = await installMockGateway(
             page,
@@ -309,18 +314,33 @@ suite.define(() => {
           );
           await input.fill("Review these");
           await input.press("Enter");
+          expect(await input.inputValue()).toBe(width === 390 ? "Review these\n" : "Review these");
+          if (width === 390) {
+            await input.pressSequentially("Keep the summary short");
+          }
+          const prompt = width === 390 ? "Review these\nKeep the summary short" : "Review these";
           expect(await gateway.getRequests("sessions.create")).toEqual([]);
+          if (width === 390) {
+            expect(await start.locator("kbd").count()).toBe(0);
+            const footer = surface.locator(":scope > .cmd-palette__footer");
+            expect(await footer.locator("kbd").count()).toBe(1);
+            expect(await footer.locator("kbd").textContent()).toMatch(/^(Enter|⏎)$/);
+          }
           await input.press("Escape");
           await input.waitFor({ state: "hidden" });
           await page.keyboard.press("ControlOrMeta+K");
           await input.waitFor({ state: "visible" });
-          expect(await input.inputValue()).toBe("Review these");
+          expect(await input.inputValue()).toBe(prompt);
           expect(await images.count()).toBe(1);
           expect(await palette.locator(".chat-attachment-thumb").count()).toBe(2);
-          await input.press("ControlOrMeta+Enter");
+          if (width === 390) {
+            await start.click();
+          } else {
+            await input.press("ControlOrMeta+Enter");
+          }
           const created = await gateway.waitForRequest("sessions.create");
           expect(created.params).toMatchObject({
-            message: "Review these",
+            message: prompt,
             attachments: [
               {
                 type: "image",
