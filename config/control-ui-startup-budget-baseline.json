@@ -1,5 +1,5 @@
 {
-  "startupJsGzipBytes": 325081,
-  "reason": "Solid 2 action/optimistic runtime adoption, W-SOLID2-RECIPES; offset tracked by HF-STARTUP-BUDGET",
-  "updatedAt": "2026-10-21"
+  "startupJsGzipBytes": 325131,
+  "reason": "Jacob Tomlinson approved +50 B for PR #173135 (2026-10-22 16:06 UTC); allowance adjustment, not a measured bundle size; 512 B growth and 64 B build variance unchanged. Retains the Solid 2 runtime allowance (HF-STARTUP-BUDGET).",
+  "updatedAt": "2026-10-22"
 }

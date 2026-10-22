@@ -535,6 +535,29 @@ describe("Control UI performance budgets", () => {
     }
   });
 
+  it("enforces the approved 50-byte startup allowance with unchanged growth and variance", () => {
+    const fixture = createCliFixture();
+    fs.copyFileSync(path.resolve(baselineName), fixture.baselinePath);
+    const assetsDir = path.join(fixture.distDir, "assets");
+    writeAssetAt(assetsDir, "index-a.js", 200_000, 200_000, 200_000);
+    writeAssetAt(assetsDir, "runtime-b.js", 125_707, 125_707, 125_707);
+    fs.appendFileSync(path.join(fixture.distDir, "index.html"), preload("runtime-b.js"));
+
+    expect(jsonCli(fixture)).toMatchObject({
+      budgets: { startupJsGzipBytes: 325_131 },
+      startupBudgetBaseline: { startupJsGzipBytes: 325_131 },
+      startupJsTolerance: 512,
+      startupJsBuildVariance: 64,
+      metrics: { startup: { js: { gzipBytes: 325_707, requests: 2 } } },
+      violations: [],
+    });
+
+    fs.appendFileSync(path.join(assetsDir, "index-a.js.gz"), "x");
+    expect(jsonCli(fixture, [], 1).violations).toEqual([
+      { metric: "startup JS gzip", actual: 325_708, limit: 325_707, unit: "bytes" },
+    ]);
+  });
+
   it("fails closed when the startup baseline is malformed", () => {
     const { distDir } = createStartupFixture();
     const baselinePath = path.join(distDir, "baseline.json");
