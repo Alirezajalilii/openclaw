@@ -206,31 +206,35 @@ export abstract class ChatPaneContext extends ChatPaneLifecycle {
       publishError: (error: unknown) => this.publishHeaderError(error, scope.headerOutcomeOwner),
       reconcileMutation: (agentId?: string | null) => scope.sessions.reconcileMutation(agentId),
     };
-    if (mode === "reclaim") {
-      const { reclaimChatPanePlacement } = await import("./chat-pane-placement.runtime.ts");
-      await reclaimChatPanePlacement({
-        ...params,
-        currentRow: () => {
-          const current = this.state ? selectedChatSessionRow(this.state) : undefined;
-          return current?.key === row.key ? current : undefined;
-        },
-        machineName,
-        reclaimingKey: pendingKey,
-        placementStartup,
-        onReclaimingChange: onPendingChange,
-      });
-    } else {
-      const { changeSessionPlacement } =
-        await import("../../components/session-placement.runtime.ts");
-      await changeSessionPlacement({
-        ...params,
-        mode,
-        presentation,
-        pendingKey,
-        requiredProfile: () =>
-          scope.context.agents.state.agentsList?.sessionPlacement?.requiredProfile?.id,
-        onPendingChange,
-      });
+    try {
+      if (mode === "reclaim") {
+        const { reclaimChatPanePlacement } = await import("./chat-pane-placement.runtime.ts");
+        await reclaimChatPanePlacement({
+          ...params,
+          currentRow: () => {
+            const current = this.state ? selectedChatSessionRow(this.state) : undefined;
+            return current?.key === row.key ? current : undefined;
+          },
+          machineName,
+          reclaimingKey: pendingKey,
+          placementStartup,
+          onReclaimingChange: onPendingChange,
+        });
+      } else {
+        const { changeSessionPlacement } =
+          await import("../../components/session-placement.runtime.ts");
+        await changeSessionPlacement({
+          ...params,
+          mode,
+          presentation,
+          pendingKey,
+          requiredProfile: () =>
+            scope.context.agents.state.agentsList?.sessionPlacement?.requiredProfile?.id,
+          onPendingChange,
+        });
+      }
+    } catch (error) {
+      params.publishError(error);
     }
   }
 
