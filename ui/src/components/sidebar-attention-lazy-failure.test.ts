@@ -16,6 +16,7 @@ import "./sidebar-attention.tsx";
 const { loadFailure } = vi.hoisted(() => ({
   loadFailure: vi.fn<() => Promise<never> | undefined>(),
 }));
+// mock-isolation: Observe feedback without creating document-global toast hosts.
 vi.mock("../lib/toast.ts", () => ({ showToast: vi.fn() }));
 vi.mock("../lib/idle-import.ts", async (original) => {
   const actual = await original<typeof import("../lib/idle-import.ts")>();

@@ -216,11 +216,13 @@ async function showTableDialog(
   // Reserve through teardown before loading; reconnect cannot revive this request.
   state.closeDialog = close;
   try {
-    await import("./modal-dialog.tsx").catch((cause: unknown) => {
+    try {
+      await import("./modal-dialog.tsx");
+    } catch (cause) {
       throw new UserFacingError(`${t("lazyView.errorTitle")}. ${t("lazyView.staleSubtitle")}`, {
         cause,
       });
-    });
+    }
     if (state.closeDialog !== close || !owner.isConnected || !trigger.isConnected) {
       return;
     }

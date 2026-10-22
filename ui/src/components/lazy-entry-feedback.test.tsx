@@ -18,16 +18,21 @@ import { renderSidebarAgentCreateDialogForMenus } from "./sidebar-menus-render.t
 import type { SidebarMenusOwner } from "./sidebar-menus-types.ts";
 import type { SidebarMenus } from "./sidebar-menus.tsx";
 
+// mock-isolation: Observe feedback without creating document-global toast hosts.
 vi.mock("../lib/toast.ts", () => ({ showToast: vi.fn() }));
+// mock-isolation: Reject the lazy module before its custom-element registration can run.
 vi.mock("./modal-dialog.tsx", () => {
   throw new Error("Dialog module unavailable. Try again.");
 });
+// mock-isolation: Reject picker loading before its modal or placement reads can run.
 vi.mock("./session-placement-move-dialog.tsx", () => {
   throw new Error("Placement picker unavailable. Try again.");
 });
+// mock-isolation: Reject activation before the agent owner can issue any requests.
 vi.mock("../app/create-agent.ts", () => {
   throw new Error("Agent creation module unavailable. Try again.");
 });
+// mock-isolation: Supply only the user trigger; the real dialog has an independent lazy owner.
 vi.mock("./agent-create-dialog.tsx", () => ({
   AgentCreateDialog: (props: { onCreate(identity: { name: string; avatar: null }): void }) => (
     <button onClick={() => props.onCreate({ name: "Scout", avatar: null })}>Create Scout</button>
