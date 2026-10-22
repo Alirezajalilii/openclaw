@@ -70,6 +70,17 @@ suite.define(() =>
       suite,
       async (page) => {
         const { gateway, modal } = await openNestedParent(page);
+        await expect
+          .poll(() =>
+            ui.button(modal, "Cancel").evaluate((element) => element === document.activeElement),
+          )
+          .toBe(true);
+        expect(await ui.button(modal, "Archive 2 sessions").getAttribute("class")).toContain(
+          "primary",
+        );
+        expect(await ui.button(modal, "Archive this session").getAttribute("class")).not.toMatch(
+          /primary|danger/u,
+        );
         const parentOnly = action === "Archive this session";
         if (parentOnly) {
           await support.captureUiProof(suite, page, "nested-archive-dialog.png");

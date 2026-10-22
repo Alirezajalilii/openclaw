@@ -146,16 +146,16 @@ export async function confirmSessionArchive(
           (rows.some(hasActiveArchiveWork)
             ? "\n\n" + t("sessionsView.archiveRunningSessions")
             : ""),
-        confirmLabel: t("sessionsView.archiveThisSession"),
-        alternativeLabel: t("sessionsView.archiveSessionCount", {
+        confirmLabel: t("sessionsView.archiveSessionCount", {
           count: t("sessionsView.groupRowCount", { count: String(rows.length) }),
         }),
+        alternativeLabel: t("sessionsView.archiveThisSession"),
         signal: scope.signal,
       });
       if (!isCurrent() || choice === null) {
         return null;
       }
-      return choice === "alternative" ? { kind: "tree", rows: guardedRows } : { kind: "single" };
+      return choice === "confirm" ? { kind: "tree", rows: guardedRows } : { kind: "single" };
     }
   }
   return (await confirmRunningSessionsArchive([session], scope.signal)) && isCurrent()
