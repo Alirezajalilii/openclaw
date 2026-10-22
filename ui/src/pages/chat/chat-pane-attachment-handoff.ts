@@ -11,16 +11,13 @@ import type { ChatComposerRecoveryOwner } from "./chat-send-contract.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import type { ChatAttachmentReadLifecycle } from "./components/chat-attachment-reads.ts";
 import { reviewPrivateComposerDraft } from "./components/private-composer-recovery-dialog.tsx";
+import { reportChatComposerDraftStorageError } from "./composer-persistence-feedback.ts";
 import {
   isIncognitoComposerScope,
   isChatComposerOwnerCurrent,
   type captureChatComposerOwner,
 } from "./composer-persistence-state.ts";
-import {
-  CHAT_COMPOSER_DRAFT_STORAGE_ERROR,
-  loadChatComposerState,
-  storedChatOutboxScopeKey,
-} from "./composer-persistence.ts";
+import { loadChatComposerState, storedChatOutboxScopeKey } from "./composer-persistence.ts";
 import { publishQueuedMessageEdit } from "./queued-message-edit.ts";
 import type { ChatSplitLayout } from "./split-layout-types.ts";
 import { visiblePanesOf } from "./split-layout.ts";
@@ -275,8 +272,7 @@ export function restorePaneStagedAttachments(
   const currentFallback =
     state.chatComposerFallbackByScope[handoffKey(paneId, state, owner).scopeKey];
   if (current && currentFallback?.storageFailed) {
-    state.lastError = CHAT_COMPOSER_DRAFT_STORAGE_ERROR;
-    state.chatError = CHAT_COMPOSER_DRAFT_STORAGE_ERROR;
+    reportChatComposerDraftStorageError(state);
   }
   releaseDisplacedChatAttachmentPayloads(
     [...displaced, ...(!current ? restored.attachments : [])],

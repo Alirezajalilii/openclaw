@@ -32,6 +32,7 @@ import { getSafeSessionStorage } from "../../local-storage.ts";
 import { releaseChatAttachmentPayloads } from "./attachment-payload-store.ts";
 import { replaceChatOutboxQueue } from "./chat-outbox-queue.ts";
 import { normalizeChatComposerDraft } from "./composer-draft.ts";
+import { reportChatComposerDraftStorageError } from "./composer-persistence-feedback.ts";
 import {
   captureChatComposerDraftSnapshot,
   loadCapturedChatComposerState,
@@ -63,8 +64,6 @@ import {
 } from "./durable-composer-persistence.ts";
 
 const CHAT_COMPOSER_DRAFT_PERSIST_DELAY_MS = 200;
-export const CHAT_COMPOSER_DRAFT_STORAGE_ERROR =
-  "Could not store the previous draft in browser storage. It remains available in this tab.";
 
 export { storedChatOutboxScopeKey } from "../../lib/chat/outbox-store.ts";
 export { listStoredChatOutboxes } from "../../lib/chat/outbox-store-projection.ts";
@@ -451,8 +450,7 @@ export class ChatComposerPersistence {
       if (!state) {
         return;
       }
-      state.lastError = CHAT_COMPOSER_DRAFT_STORAGE_ERROR;
-      state.chatError = CHAT_COMPOSER_DRAFT_STORAGE_ERROR;
+      reportChatComposerDraftStorageError(state);
     },
     () => this.persistChangedState(),
   );
