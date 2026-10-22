@@ -17,8 +17,13 @@ vi.mock("./image-lightbox-content.tsx", () => {
 });
 
 afterEach(async () => {
+  for (const host of document.querySelectorAll(
+    "openclaw-agent-avatar, openclaw-lobster-pet, openclaw-image-lightbox",
+  )) {
+    host.remove();
+  }
+  await waitForSolid(() => expect(document.querySelector('[role="alert"]')).toBeNull());
   document.body.replaceChildren();
-  await Promise.resolve();
   vi.useRealTimers();
 });
 
