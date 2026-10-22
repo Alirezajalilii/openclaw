@@ -86,6 +86,11 @@ it.each(["desktop", "mobile"] as const)(
       expect(copy().hasAttribute("disabled")).toBe(false);
     });
     expect(notice).not.toHaveBeenCalled();
+    setPr(pullRequest({ url: "https://example.test/replacement" }));
+    flush();
+    await waitForSolid(() => expect(view.queryByRole("alert")).toBeNull());
+    setPr(pullRequest({ url: "https://example.test/first" }));
+    flush();
     copy().click();
     expect(writeText).toHaveBeenNthCalledWith(2, "https://example.test/first");
     await waitForSolid(() => {
