@@ -2296,6 +2296,7 @@
                       "providers/claude-max-api-proxy",
                       "providers/clawrouter",
                       "providers/cloudflare-ai-gateway",
+                      "providers/dothoosh",
                       "providers/kilocode",
                       "providers/litellm",
                       "providers/neon",

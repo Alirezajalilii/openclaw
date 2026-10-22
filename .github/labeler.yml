@@ -686,6 +686,11 @@
       - any-glob-to-any-file:
           - "extensions/bifrost/**"
           - "docs/providers/bifrost.md"
+"extensions: dothoosh":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/dothoosh/**"
+          - "docs/providers/dothoosh.md"
 "extensions: agentsapi":
   - changed-files:
       - any-glob-to-any-file:
