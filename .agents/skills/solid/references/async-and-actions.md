@@ -287,6 +287,8 @@ Keep the flag out of aggregate props memos. Cron passes it as a separate JSX
 prop: `<CronView {...viewProps()} busy={page.saving() || viewProps().busy} />`.
 Only consumers of `busy` should join its optimistic presentation lane;
 unrelated form and route props follow the ordinary owner snapshot.
+The same applies to object-valued JSX props: pass busy flags and completion
+readers separately so a busy update cannot hold the feedback slot behind its own work.
 
 `refresh` takes the actual Solid accessor or derived-store root. A wrapper
 such as `refresh(() => jobsRead())` is not refreshable. A bare refresh asks
@@ -355,7 +357,12 @@ a rejection consumer for work whose view is replaced or disposed. Preserve the
 owner's cancellation and error-precedence contract. Each new completion replaces
 the previous read, so an older failed refresh cannot overwrite a newer success.
 Re-arm this narrow error slot on retry to clear the previous error immediately;
-keep the controls outside it. A local error string written by each completion
+keep the controls outside it. Always consume the completion inside that boundary,
+even while an optimistic saving flag is true. Guarding its only read with
+`!saving()` prevents `Loading` from observing the new pending completion and can
+leave the previous `Errored` fallback visible throughout retry. Search test and
+Workboard delete feedback keep the read live; their held-retry tests verify that
+the old alert clears before the replacement operation settles. A local error string written by each completion
 would lose that ordering and require a second request-generation guard.
 
 ## Key a projection over an owner snapshot
