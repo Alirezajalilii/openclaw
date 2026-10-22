@@ -9,18 +9,25 @@ const suite = support.createSessionManagementE2eSuite();
 const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
 const parentKey = "agent:main:flaky-connection";
 const childKey = "agent:main:markdown-tooltip";
+const siblingKey = "agent:main:archive-copy";
 const otherKey = "agent:main:release-notes";
 
-async function openNestedParent(page: Page) {
-  const child = sessionRow(childKey, "Child", baseTime - 1_000, { spawnedBy: parentKey });
-  const parent = sessionRow(parentKey, "Parent", baseTime, { childSessions: [childKey] });
+async function openNestedParent(page: Page, childCount: number) {
+  const children = [childKey, siblingKey]
+    .slice(0, childCount)
+    .map((key, index) =>
+      sessionRow(key, `Child ${index + 1}`, baseTime - 1_000, { spawnedBy: parentKey }),
+    );
+  const parent = sessionRow(parentKey, "Parent", baseTime, {
+    childSessions: children.map((child) => child.key),
+  });
   const other = sessionRow(otherKey, "Release notes draft", baseTime - 5_000);
   const gateway = await support.installMockGateway(page, {
-    sessions: [parent, child, other],
+    sessions: [parent, ...children, other],
     methodResponses: {
       "sessions.list": {
         cases: [
-          { match: { spawnedBy: parentKey }, response: support.sessionsListResponse([child]) },
+          { match: { spawnedBy: parentKey }, response: support.sessionsListResponse(children) },
           { response: support.sessionsListResponse([parent, other]) },
         ],
       },
@@ -38,10 +45,12 @@ async function openNestedParent(page: Page) {
   await parentRow.hover();
   await parentRow.locator("[data-sidebar-session-archive]").click();
   const modal = await support.waitForConfirmModal(page);
-  await modal.getByText("Archive session?", { exact: true }).waitFor();
+  await modal.getByText("Also archive nested sessions?", { exact: true }).waitFor();
   await modal
     .getByText(
-      '"Parent" has a nested session. Archive only this one and it moves to the top level.',
+      childCount === 1
+        ? '"Parent" has 1 directly nested session. If you archive only this session, that nested session moves to the top level.'
+        : '"Parent" has 2 directly nested sessions. If you archive only this session, those nested sessions move to the top level.',
       { exact: true },
     )
     .waitFor();
@@ -62,26 +71,31 @@ async function archivedKeys(gateway: Gateway, methods = ["sessions.patch", "sess
 
 suite.define(() =>
   it.each([
-    { action: "Archive this session", keys: [parentKey] },
-    { action: "Archive 2 sessions", keys: [childKey, parentKey] },
-    { action: "Cancel", keys: [] },
-  ])("nested archive dialog: $action", ({ action, keys }) =>
+    { action: "Archive only this session", childCount: 1, keys: [parentKey] },
+    { action: "Archive with nested sessions", childCount: 1, keys: [childKey, parentKey] },
+    { action: "Cancel", childCount: 1, keys: [] },
+    {
+      action: "Archive with nested sessions",
+      childCount: 2,
+      keys: [siblingKey, childKey, parentKey],
+    },
+  ])("nested archive dialog: $action ($childCount children)", ({ action, childCount, keys }) =>
     ui.withSessionPage(
       suite,
       async (page) => {
-        const { gateway, modal } = await openNestedParent(page);
+        const { gateway, modal } = await openNestedParent(page, childCount);
         await expect
           .poll(() =>
             ui.button(modal, "Cancel").evaluate((element) => element === document.activeElement),
           )
           .toBe(true);
-        expect(await ui.button(modal, "Archive 2 sessions").getAttribute("class")).toContain(
-          "primary",
-        );
-        expect(await ui.button(modal, "Archive this session").getAttribute("class")).not.toMatch(
-          /primary|danger/u,
-        );
-        const parentOnly = action === "Archive this session";
+        expect(
+          await ui.button(modal, "Archive with nested sessions").getAttribute("class"),
+        ).toContain("primary");
+        expect(
+          await ui.button(modal, "Archive only this session").getAttribute("class"),
+        ).not.toMatch(/primary|danger/u);
+        const parentOnly = action === "Archive only this session";
         if (parentOnly) {
           await support.captureUiProof(suite, page, "nested-archive-dialog.png");
         }
