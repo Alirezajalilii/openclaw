@@ -71,7 +71,7 @@ async function archivedKeys(gateway: Gateway, methods = ["sessions.patch", "sess
 
 suite.define(() =>
   it.each([
-    { action: "Archive only this session", childCount: 1, keys: [parentKey] },
+    { action: "Archive this session", childCount: 1, keys: [parentKey] },
     { action: "Archive all (2)", childCount: 1, keys: [childKey, parentKey] },
     { action: "Cancel", childCount: 1, keys: [] },
     {
@@ -92,10 +92,10 @@ suite.define(() =>
         expect(
           await ui.button(modal, `Archive all (${childCount + 1})`).getAttribute("class"),
         ).toContain("primary");
-        expect(
-          await ui.button(modal, "Archive only this session").getAttribute("class"),
-        ).not.toMatch(/primary|danger/u);
-        const parentOnly = action === "Archive only this session";
+        expect(await ui.button(modal, "Archive this session").getAttribute("class")).not.toMatch(
+          /primary|danger/u,
+        );
+        const parentOnly = action === "Archive this session";
         if (parentOnly) {
           await support.captureUiProof(suite, page, "nested-archive-dialog.png");
         }
