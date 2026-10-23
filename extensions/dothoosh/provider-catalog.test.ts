@@ -170,17 +170,13 @@ it("fetches both listings, keys each route correctly and merges by id", async ()
 });
 
 it("sends Bearer auth on the OpenAI listing", async () => {
-  const fetchSpy = listings(OPENAI_ROWS, []);
+  const fetchSpy = listings(OPENAI_ROWS, ANTHROPIC_ROWS);
   await buildDotHooshLiveProvider({ apiKey: "fixture-key" });
   const openai = fetchSpy.mock.calls.find(([params]) => !params.url.includes("/anthropic/"));
   expect(new Headers(openai?.[0].init?.headers).get("authorization")).toBe("Bearer fixture-key");
 });
 
-it("returns an empty catalog for an empty listing and rejects on a failed fetch", async () => {
-  listings([], []);
-  await expect(buildDotHooshLiveProvider({ apiKey: "k" })).resolves.toMatchObject({ models: [] });
-  clearLiveCatalogCacheForTests();
-  vi.restoreAllMocks();
+it("rejects on a failed fetch", async () => {
   vi.spyOn(ssrfRuntime, "fetchWithSsrFGuard").mockImplementation(async (params) => ({
     response: new Response("nope", { status: 503 }),
     finalUrl: params.url,
@@ -189,8 +185,104 @@ it("returns an empty catalog for an empty listing and rejects on a failed fetch"
   await expect(buildDotHooshLiveProvider({ apiKey: "k" })).rejects.toThrow();
 });
 
+// A listing that is empty, an error envelope or all-unusable is an outage, never an empty
+// catalog: the provider rejects so the live-catalog outcome is "unavailable" and the previous
+// catalog stays. One broken listing must not drop the other listing's models either.
+const UNUSABLE_LISTINGS: Array<[string, unknown[]]> = [
+  ["an empty data list", []],
+  ["rows without an id", [{ name: "no id" }, null]],
+  ["rows without text output", [{ id: "image-only", architecture: { modality: "text->image" } }]],
+];
+
+for (const [label, rows] of UNUSABLE_LISTINGS) {
+  it(`rejects when the OpenAI listing is ${label}, even if the Anthropic one is healthy`, async () => {
+    listings(rows, ANTHROPIC_ROWS);
+    await expect(buildDotHooshLiveProvider({ apiKey: "k" })).rejects.toThrow(/dothoosh/i);
+  });
+
+  it(`rejects when the Anthropic listing is ${label}, even if the OpenAI one is healthy`, async () => {
+    listings(OPENAI_ROWS, rows);
+    await expect(buildDotHooshLiveProvider({ apiKey: "k" })).rejects.toThrow(/dothoosh/i);
+  });
+}
+
+it("rejects an error-envelope body on either listing", async () => {
+  for (const broken of ["/anthropic/", "/v1/models"]) {
+    clearLiveCatalogCacheForTests();
+    vi.restoreAllMocks();
+    vi.spyOn(ssrfRuntime, "fetchWithSsrFGuard").mockImplementation(async (params) => {
+      const isBroken =
+        broken === "/anthropic/"
+          ? params.url.includes(broken)
+          : !params.url.includes("/anthropic/");
+      const data = params.url.includes("/anthropic/") ? ANTHROPIC_ROWS : OPENAI_ROWS;
+      return {
+        response: Response.json(isBroken ? { error: { message: "upstream down" } } : { data }),
+        finalUrl: params.url,
+        release: async () => {},
+      };
+    });
+    await expect(buildDotHooshLiveProvider({ apiKey: "k" })).rejects.toThrow();
+  }
+});
+
+it("does not cache an unusable listing as the catalog", async () => {
+  listings([], ANTHROPIC_ROWS);
+  await expect(buildDotHooshLiveProvider({ apiKey: "k" })).rejects.toThrow();
+  vi.restoreAllMocks();
+  listings(OPENAI_ROWS, ANTHROPIC_ROWS);
+  const provider = await buildDotHooshLiveProvider({ apiKey: "k" });
+  expect(provider.models.map((model) => model.id)).toContain("deepseek-v4");
+});
+
+it("keeps the live limits and prices over the offline seed", async () => {
+  listings(
+    [
+      {
+        id: "deepseek-v4-pro",
+        context_length: 1_000_000,
+        max_output_tokens: 384_000,
+        pricing: { prompt: "0.0000017", completion: "0.0000051" },
+        supported_parameters: ["tools", "reasoning"],
+      },
+    ],
+    ANTHROPIC_ROWS,
+  );
+  const provider = await buildDotHooshLiveProvider({ apiKey: "k" });
+  const model = byId(provider.models, "deepseek-v4-pro");
+  expect(model).toMatchObject({ contextWindow: 1_000_000, maxTokens: 384_000, reasoning: true });
+  expect(model.cost.input).toBeCloseTo(1.7, 9);
+  expect(model.compat).toMatchObject({ supportsTools: true });
+});
+
+it("pins tier boundaries: the threshold itself stays on the lower tier", () => {
+  const model = byId(
+    projectDotHooshRows(
+      [
+        {
+          id: "tiered",
+          pricing: { prompt: "0.000001", completion: "0.000002" },
+          pricing_tiers: [
+            { above_input_tokens: 100000, prompt: "0.000002" },
+            { above_input_tokens: 200000, completion: "0.000009" },
+          ],
+        },
+      ],
+      "openai",
+    ),
+    "tiered",
+  );
+  // [0, 100001) covers 100000 input tokens; the second tier starts at 200001 and carries the
+  // first tier's prompt price over.
+  expect(model.cost.tieredPricing).toEqual([
+    { range: [0, 100001], input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
+    { range: [100001, 200001], input: 2, output: 2, cacheRead: 0, cacheWrite: 0 },
+    { range: [200001], input: 2, output: 9, cacheRead: 0, cacheWrite: 0 },
+  ]);
+});
+
 it("derives the Anthropic listing from an explicit base URL", async () => {
-  const fetchSpy = listings(OPENAI_ROWS, []);
+  const fetchSpy = listings(OPENAI_ROWS, ANTHROPIC_ROWS);
   await buildDotHooshLiveProvider({ apiKey: "k", baseUrl: "https://proxy.example/v1/" });
   expect(fetchSpy.mock.calls.map(([params]) => params.url).toSorted()).toEqual([
     "https://proxy.example/anthropic/v1/models",
