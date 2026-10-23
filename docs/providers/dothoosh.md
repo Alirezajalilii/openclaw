@@ -65,6 +65,9 @@ whose only OpenAI route is Responses use the Responses API, and the rest use Cha
 Only the default model (`deepseek-v4-pro`) is seeded offline, with placeholder limits and no price,
 so onboarding works before the first fetch; the live row replaces it.
 
+A listing that is empty, an error body, or has no usable model on either route counts as an
+outage, not as an empty catalog: the previous catalog stays and the next refresh retries.
+
 ## Config example
 
 ```json5
