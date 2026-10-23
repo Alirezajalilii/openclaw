@@ -8,7 +8,7 @@ title: "DotHoosh"
 
 [DotHoosh](https://gateway.dothoosh.com) is an AI API gateway for users in Iran.
 It is billed in Toman from a prepaid wallet and serves Claude, GPT, Gemini,
-DeepSeek and Kimi models with one API key. The bundled plugin ships a static
+DeepSeek and Kimi models with one API key. The bundled plugin reads the live
 catalog and picks the right wire protocol per model.
 
 | Property | Value                                                                   |
@@ -49,41 +49,21 @@ openclaw onboard --non-interactive \
   --dothoosh-api-key "$DOTHOOSH_API_KEY"
 ```
 
-## Built-in catalog
+## Live catalog
 
-DotHoosh accepts text input only, on every route. Prices are the vendors' USD
-list prices per million tokens before DotHoosh converts them to Toman; see
-[gateway.dothoosh.com/models](https://gateway.dothoosh.com/models) for the live
-catalog.
+The plugin has no built-in model list. With `DOTHOOSH_API_KEY` set, OpenClaw reads
+`GET https://gateway.dothoosh.com/v1/models` and `GET https://gateway.dothoosh.com/anthropic/v1/models`
+(cached for 60 seconds), so a new model or a price change shows up without an OpenClaw release.
+Every row supplies the context window, output limit, text or image input, tool and reasoning
+support, per-token prices (cache read and write included, converted to per-million) and the
+long-context price tiers that apply to the whole request. Prices are the vendors' USD list prices
+before DotHoosh converts them to Toman; see
+[gateway.dothoosh.com/models](https://gateway.dothoosh.com/models) for the same data.
 
-| Model ref                        | Route              | Context   | Max output |
-| -------------------------------- | ------------------ | --------- | ---------- |
-| `dothoosh/deepseek-v4-pro`       | Chat Completions   | 1,000,000 | 384,000    |
-| `dothoosh/deepseek-flash`        | Chat Completions   | 1,000,000 | 384,000    |
-| `dothoosh/kimi-k3`               | Chat Completions   | 1,048,576 | 131,072    |
-| `dothoosh/kimi-k2.7-code`        | Chat Completions   | 262,144   | 262,144    |
-| `dothoosh/kimi-k2.6`             | Chat Completions   | 262,144   | 262,144    |
-| `dothoosh/gemini-4-argon`        | Chat Completions   | 1,048,576 | 65,536     |
-| `dothoosh/gemini-3.8-flash`      | Chat Completions   | 1,048,576 | 65,536     |
-| `dothoosh/gemini-3.5-flash-lite` | Chat Completions   | 1,048,576 | 65,536     |
-| `dothoosh/gpt-6.1-sol`           | Responses          | 1,050,000 | 128,000    |
-| `dothoosh/gpt-6-astra`           | Responses          | 1,050,000 | 128,000    |
-| `dothoosh/gpt-6-luna`            | Responses          | 1,050,000 | 128,000    |
-| `dothoosh/claude-opus-5-5`       | Anthropic Messages | 1,000,000 | 128,000    |
-| `dothoosh/claude-sonnet-5-5`     | Anthropic Messages | 1,000,000 | 128,000    |
-| `dothoosh/claude-haiku-5-5`      | Anthropic Messages | 1,000,000 | 128,000    |
-| `dothoosh/claude-fable-5-1`      | Anthropic Messages | 1,000,000 | 128,000    |
-
-Claude models are served only on the Anthropic Messages route, and GPT-6 models
-accept function tools only on the Responses route, so those entries override the
-provider default per model. Long prompts are billed at the vendor's long-context tier
-(whole request): above 100,000 tokens for Claude Haiku 5.5 and above 272,000 for GPT-6.
-
-<Warning>
-OpenClaw's Anthropic client appends `/v1` to the base URL automatically. Claude
-entries therefore use `https://gateway.dothoosh.com/anthropic` (the gateway
-serves `/anthropic/v1/messages`), not `/anthropic/v1`.
-</Warning>
+Routing follows the listing. Models served on the Anthropic route use Anthropic Messages, models
+whose only OpenAI route is Responses use the Responses API, and the rest use Chat Completions.
+Only the default model (`deepseek-v4-pro`) is seeded offline, with placeholder limits and no price,
+so onboarding works before the first fetch; the live row replaces it.
 
 ## Config example
 
@@ -103,28 +83,7 @@ serves `/anthropic/v1/messages`), not `/anthropic/v1`.
         baseUrl: "https://gateway.dothoosh.com/v1",
         apiKey: "${DOTHOOSH_API_KEY}",
         api: "openai-completions",
-        models: [
-          {
-            id: "deepseek-v4-pro",
-            name: "DeepSeek V4 Pro",
-            reasoning: true,
-            input: ["text"],
-            cost: { input: 1.694, output: 5.082, cacheRead: 0.0565, cacheWrite: 0 },
-            contextWindow: 1000000,
-            maxTokens: 384000,
-          },
-          {
-            id: "claude-sonnet-5-5",
-            name: "Claude Sonnet 5.5",
-            api: "anthropic-messages",
-            baseUrl: "https://gateway.dothoosh.com/anthropic",
-            reasoning: true,
-            input: ["text"],
-            cost: { input: 2.5667, output: 12.8333, cacheRead: 0.1283, cacheWrite: 3.2083 },
-            contextWindow: 1000000,
-            maxTokens: 128000,
-          },
-        ],
+        models: [],
       },
     },
   },
@@ -132,9 +91,9 @@ serves `/anthropic/v1/messages`), not `/anthropic/v1`.
 ```
 
 <Tip>
-Model refs use the form `dothoosh/<modelId>`. `GET /v1/models` on the gateway
-lists the models your key may call; add any it advertises that the bundled
-catalog does not yet include under `models.providers.dothoosh.models`.
+Model refs use the form `dothoosh/<modelId>`. The catalog is discovered from the
+gateway, so `models` can stay empty. Run `openclaw models list --provider dothoosh`
+to see what your key may call.
 </Tip>
 
 <AccordionGroup>
