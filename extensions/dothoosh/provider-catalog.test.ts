@@ -51,7 +51,7 @@ it("routes GPT-6 models through Responses with store disabled", () => {
   for (const id of ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"]) {
     expect(modelById(id)).toMatchObject({
       api: "openai-responses",
-      contextWindow: 272_000,
+      contextWindow: 1_050_000,
       compat: { supportsStore: false },
     });
   }
@@ -65,9 +65,24 @@ it("lists text-only models with unique ids and consistent limits", () => {
     expect(model.maxTokens).toBeLessThanOrEqual(model.contextWindow);
   }
   expect(modelById("claude-haiku-5-5")).toMatchObject({
-    contextWindow: 100_000,
-    maxTokens: 64_000,
-    cost: { input: 0.1283, output: 0.6417, cacheRead: 0.0128, cacheWrite: 0.1283 },
+    contextWindow: 1_000_000,
+    maxTokens: 128_000,
+    cost: {
+      input: 0.1283,
+      output: 0.6417,
+      cacheRead: 0.0128,
+      cacheWrite: 0.1604,
+      tieredPricing: [
+        {
+          range: [0, 100_001],
+          input: 0.1283,
+          output: 0.6417,
+          cacheRead: 0.0128,
+          cacheWrite: 0.1604,
+        },
+        { range: [100_001], input: 0.6417, output: 3.2083, cacheRead: 0.0642, cacheWrite: 0.8021 },
+      ],
+    },
   });
 });
 

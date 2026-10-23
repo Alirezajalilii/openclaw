@@ -64,19 +64,20 @@ catalog.
 | `dothoosh/kimi-k2.7-code`        | Chat Completions   | 262,144   | 262,144    |
 | `dothoosh/kimi-k2.6`             | Chat Completions   | 262,144   | 262,144    |
 | `dothoosh/gemini-4-argon`        | Chat Completions   | 1,048,576 | 65,536     |
-| `dothoosh/gemini-3.8-flash`      | Chat Completions   | 200,000   | 65,536     |
-| `dothoosh/gemini-3.5-flash-lite` | Chat Completions   | 200,000   | 65,536     |
-| `dothoosh/gpt-6.1-sol`           | Responses          | 272,000   | 128,000    |
-| `dothoosh/gpt-6-astra`           | Responses          | 272,000   | 128,000    |
-| `dothoosh/gpt-6-luna`            | Responses          | 272,000   | 128,000    |
+| `dothoosh/gemini-3.8-flash`      | Chat Completions   | 1,048,576 | 65,536     |
+| `dothoosh/gemini-3.5-flash-lite` | Chat Completions   | 1,048,576 | 65,536     |
+| `dothoosh/gpt-6.1-sol`           | Responses          | 1,050,000 | 128,000    |
+| `dothoosh/gpt-6-astra`           | Responses          | 1,050,000 | 128,000    |
+| `dothoosh/gpt-6-luna`            | Responses          | 1,050,000 | 128,000    |
 | `dothoosh/claude-opus-5-5`       | Anthropic Messages | 1,000,000 | 128,000    |
 | `dothoosh/claude-sonnet-5-5`     | Anthropic Messages | 1,000,000 | 128,000    |
-| `dothoosh/claude-haiku-5-5`      | Anthropic Messages | 100,000   | 64,000     |
+| `dothoosh/claude-haiku-5-5`      | Anthropic Messages | 1,000,000 | 128,000    |
 | `dothoosh/claude-fable-5-1`      | Anthropic Messages | 1,000,000 | 128,000    |
 
 Claude models are served only on the Anthropic Messages route, and GPT-6 models
 accept function tools only on the Responses route, so those entries override the
-provider default per model.
+provider default per model. Long prompts are billed at the vendor's long-context tier
+(whole request): above 100,000 tokens for Claude Haiku 5.5 and above 272,000 for GPT-6.
 
 <Warning>
 OpenClaw's Anthropic client appends `/v1` to the base URL automatically. Claude
@@ -119,7 +120,7 @@ serves `/anthropic/v1/messages`), not `/anthropic/v1`.
             baseUrl: "https://gateway.dothoosh.com/anthropic",
             reasoning: true,
             input: ["text"],
-            cost: { input: 2.5667, output: 12.8333, cacheRead: 0.1283, cacheWrite: 2.5667 },
+            cost: { input: 2.5667, output: 12.8333, cacheRead: 0.1283, cacheWrite: 3.2083 },
             contextWindow: 1000000,
             maxTokens: 128000,
           },
